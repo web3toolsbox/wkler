@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bkler"
-version = "0.2.0"
+version = "0.2.1"
 description = "浏览器键盘记录器 - 仅监控浏览器窗口的键盘输入，记录到 ~/.dev/keylogger_*.log"
 readme = "README.md"
 requires-python = ">=3.8"

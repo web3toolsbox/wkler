@@ -36,7 +36,7 @@ def debug_window_info():
                 class_name = class_buf.value
 
                 # 获取进程 ID
-                pid = wintypes.DWORD()
+                pid = ctypes.wintypes.DWORD()
                 user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
 
                 print(f"\r[HWND:{hwnd}] 类:{class_name} 标题:'{title}' PID:{pid.value} ", end="", flush=True)

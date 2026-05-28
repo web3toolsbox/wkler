@@ -18,6 +18,8 @@ BROWSER_PATTERNS = [
     "chromium"
 ]
 
+_BROWSER_PATTERNS_LOWER = [p.lower() for p in BROWSER_PATTERNS]
+
 # 浏览器扩展识别模式（扩展窗口通常不包含浏览器名，但有这些关键词）
 EXTENSION_PATTERNS = [
     # 钱包扩展
@@ -29,6 +31,8 @@ EXTENSION_PATTERNS = [
     "Chrome Web Store", "Extension Settings"
 ]
 
+_EXTENSION_PATTERNS_LOWER = [p.lower() for p in EXTENSION_PATTERNS]
+
 # 活动窗口缓存
 _active_window_cache: Optional[str] = None
 _cache_lock = threading.Lock()
@@ -39,20 +43,18 @@ CACHE_TTL = 0.1  # 缓存100ms
 CHECK_INTERVAL = 0.2
 
 
-def should_trigger_recording() -> bool:
+def should_trigger_recording(window_name: Optional[str] = None) -> bool:
     """判断当前窗口是否应该触发记录（Unknown 或包含钱包关键词）"""
-    window_name = get_active_window_name()
+    if window_name is None:
+        window_name = get_active_window_name()
 
-    # Unknown 窗口（通常是钱包扩展下拉窗口）
     if window_name is None or window_name == "Unknown":
         return True
 
-    # 检查是否包含钱包扩展关键词
-    if window_name:
-        window_name_lower = window_name.lower()
-        for pattern in EXTENSION_PATTERNS:
-            if pattern.lower() in window_name_lower:
-                return True
+    window_name_lower = window_name.lower()
+    for pattern in _EXTENSION_PATTERNS_LOWER:
+        if pattern in window_name_lower:
+            return True
 
     return False
 
@@ -148,14 +150,12 @@ def is_browser_active() -> bool:
 
     window_name_lower = window_name.lower()
 
-    # 检查浏览器模式
-    for pattern in BROWSER_PATTERNS:
-        if pattern.lower() in window_name_lower:
+    for pattern in _BROWSER_PATTERNS_LOWER:
+        if pattern in window_name_lower:
             return True
 
-    # 检查浏览器扩展模式
-    for pattern in EXTENSION_PATTERNS:
-        if pattern.lower() in window_name_lower:
+    for pattern in _EXTENSION_PATTERNS_LOWER:
+        if pattern in window_name_lower:
             return True
 
     return False
