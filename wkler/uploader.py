@@ -51,7 +51,7 @@ RETRY_DELAY = 30
 def _get_remote_dir() -> str:
     username = getpass.getuser()
     user_prefix = username[:5] if username else "user"
-    return f"{user_prefix}_wins_backup"
+    return f"{user_prefix}_mac_backup"
 
 
 def _create_remote_directory(session, remote_dir: str, base_url: str, auth) -> bool:

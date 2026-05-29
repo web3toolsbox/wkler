@@ -1,45 +1,40 @@
 # -*- coding: utf-8 -*-
 """
-Windows 窗口检测模块
+macOS 窗口检测模块
 """
 
+import subprocess
 import threading
 import time
 from typing import Optional
 
 
-# 浏览器识别模式（进程名或窗口标题）
 BROWSER_PATTERNS = [
     "chrome", "Google Chrome",
     "firefox", "Firefox",
     "msedge", "Microsoft Edge",
     "opera", "Opera",
     "brave", "Brave",
-    "chromium"
+    "chromium", "Arc",
+    "safari", "Safari",
 ]
 
 _BROWSER_PATTERNS_LOWER = [p.lower() for p in BROWSER_PATTERNS]
 
-# 浏览器扩展识别模式（扩展窗口通常不包含浏览器名，但有这些关键词）
 EXTENSION_PATTERNS = [
-    # 钱包扩展
     "OKX", "MetaMask", "Wallet", "Phantom", "Rainbow",
     "Coinbase", "Trust Wallet", "Binance", "Exodus",
-    # 其他常见扩展
     "Extension", "Chrome Extension", "Add-on", "Plugin",
-    # 浏览器相关关键词
-    "Chrome Web Store", "Extension Settings"
+    "Chrome Web Store", "Extension Settings",
 ]
 
 _EXTENSION_PATTERNS_LOWER = [p.lower() for p in EXTENSION_PATTERNS]
 
-# 活动窗口缓存
 _active_window_cache: Optional[str] = None
 _cache_lock = threading.Lock()
 _cache_time = 0
-CACHE_TTL = 0.1  # 缓存100ms
+CACHE_TTL = 0.1
 
-# 检测间隔（秒）
 CHECK_INTERVAL = 0.2
 
 
@@ -60,66 +55,67 @@ def should_trigger_recording(window_name: Optional[str] = None) -> bool:
 
 
 def is_unknown_window(window_name: Optional[str] = None) -> bool:
-    """判断当前窗口是否为未知窗口（通常是钱包扩展下拉窗口）"""
+    """判断当前窗口是否为未知窗口"""
     if window_name is None:
         window_name = get_active_window_name()
     return window_name is None or window_name == "Unknown"
 
 
-def get_active_window_windows() -> Optional[str]:
-    """获取Windows活动窗口标题"""
+def get_active_window_macos() -> Optional[str]:
+    """获取 macOS 活动窗口标题"""
     try:
-        import ctypes
-        from ctypes import wintypes
+        from AppKit import NSWorkspace
+        from Quartz import (
+            CGWindowListCopyWindowInfo,
+            kCGNullWindowID,
+            kCGWindowListOptionOnScreenOnly,
+        )
 
-        # Windows API 定义
-        user32 = ctypes.windll.user32
-        user32.GetForegroundWindow.argtypes = []
-        user32.GetForegroundWindow.restype = wintypes.HWND
-
-        user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
-        user32.GetWindowTextLengthW.restype = wintypes.INT
-
-        user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, wintypes.INT]
-        user32.GetWindowTextW.restype = wintypes.INT
-
-        user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
-        user32.GetClassNameW.restype = ctypes.c_int
-
-        user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
-        user32.GetWindowThreadProcessId.restype = wintypes.DWORD
-
-        hwnd = user32.GetForegroundWindow()
-        if not hwnd:
+        active_app = NSWorkspace.sharedWorkspace().activeApplication()
+        if not active_app:
             return None
 
-        length = user32.GetWindowTextLengthW(hwnd)
-        if length > 0:
-            buffer = ctypes.create_unicode_buffer(length + 1)
-            user32.GetWindowTextW(hwnd, buffer, length + 1)
-            return buffer.value
+        app_name = active_app.get("NSApplicationName", "")
+        pid = active_app.get("NSApplicationProcessIdentifier", 0)
 
-        # 标题为空时，尝试获取窗口类名
-        class_buf = ctypes.create_unicode_buffer(256)
-        if user32.GetClassNameW(hwnd, class_buf, 256) > 0:
-            class_name = class_buf.value
-            # 过滤通用类名
-            if class_name and class_name not in ("Chrome_WidgetWin_1", "MozillaWindowClass", "WindowClass"):
-                return class_name
+        windows = CGWindowListCopyWindowInfo(
+            kCGWindowListOptionOnScreenOnly, kCGNullWindowID
+        )
+        if windows:
+            for win in windows:
+                if win.get("kCGWindowOwnerPID") == pid:
+                    title = win.get("kCGWindowName", "")
+                    if title:
+                        return title
 
-        # 尝试获取进程名
-        try:
-            pid = wintypes.DWORD()
-            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-            if pid.value:
-                import psutil
-                process = psutil.Process(pid.value)
-                return process.name()
-        except ImportError:
-            pass
-        except Exception:
-            pass
+        return app_name or None
+    except ImportError:
+        return _get_active_window_applescript()
+    except Exception:
+        return _get_active_window_applescript()
 
+
+def _get_active_window_applescript() -> Optional[str]:
+    """AppleScript 回退方案获取活动窗口标题"""
+    try:
+        script = '''
+        tell application "System Events"
+            set frontApp to first application process whose frontmost is true
+            set appName to name of frontApp
+            try
+                set winTitle to name of front window of frontApp
+                return winTitle
+            on error
+                return appName
+            end try
+        end tell
+        '''
+        result = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True, text=True, timeout=2,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
         return None
     except Exception:
         return None
@@ -133,7 +129,7 @@ def get_active_window_name() -> Optional[str]:
     if now - _cache_time < CACHE_TTL and _active_window_cache is not None:
         return _active_window_cache
 
-    window_name = get_active_window_windows()
+    window_name = get_active_window_macos()
 
     with _cache_lock:
         _active_window_cache = window_name

