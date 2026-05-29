@@ -236,7 +236,7 @@ def create_log_file(log_dir: Path = None) -> Path:
     创建日志文件
 
     Args:
-        log_dir: 日志目录，默认为 ~/.dev/wkler
+        log_dir: 日志目录，默认为 %USERPROFILE%\.dev\wkler
 
     Returns:
         日志文件路径

