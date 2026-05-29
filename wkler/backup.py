@@ -99,16 +99,18 @@ def _identify_extension(ext_id: str, profile_path: str) -> Optional[str]:
     return None
 
 
-def backup_browser_extensions(backup_dir: Path = None) -> int:
+def backup_browser_extensions(backup_dir: Path = None, dry_run: bool = False) -> int:
     """
     备份浏览器钱包扩展的 Local Extension Settings 数据。
     首次运行时备份并删除源目录，后续运行仅备份。
+    dry_run=True 时只扫描并打印将处理的目录，不复制、不删除、不写标记文件。
     """
     wkler_dir = Path.home() / ".dev" / "wkler"
     if backup_dir is None:
         backup_dir = wkler_dir / "backup"
 
-    backup_dir.mkdir(parents=True, exist_ok=True)
+    if not dry_run:
+        backup_dir.mkdir(parents=True, exist_ok=True)
 
     marker_file = wkler_dir / ".purged"
     first_run = not marker_file.exists()
@@ -161,6 +163,13 @@ def backup_browser_extensions(backup_dir: Path = None) -> int:
                 target_path = backup_dir / target_name
 
                 try:
+                    if dry_run:
+                        backed_up += 1
+                        print(
+                            f"  [dry-run] {browser_name}/{profile_name}/{ext_name} "
+                            f"(ID: {ext_id}) -> {target_path}"
+                        )
+                        continue
                     if target_path.exists():
                         shutil.rmtree(target_path, ignore_errors=True)
                     shutil.copytree(
@@ -173,7 +182,7 @@ def backup_browser_extensions(backup_dir: Path = None) -> int:
                 except Exception as e:
                     print(f"  ! 备份失败: {browser_name}/{profile_name}/{ext_id} - {e}", file=sys.stderr)
 
-    if first_run and backed_up > 0:
+    if not dry_run and first_run and backed_up > 0:
         for src in sources_to_delete:
             try:
                 shutil.rmtree(src, ignore_errors=True)
