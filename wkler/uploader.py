@@ -205,9 +205,8 @@ def collect_old_logs(wkler_dir: Path) -> List[Path]:
             old_logs.append(f)
     return old_logs
 
-
 def upload_all() -> None:
-    """主入口：压缩备份 + 上传备份 + 上传旧日志"""
+    """主入口：压缩备份 + 上传"""
     if not HAS_REQUESTS:
         print("  ! 缺少 requests 库，跳过上传")
         return
@@ -218,9 +217,7 @@ def upload_all() -> None:
     wkler_dir = Path.home() / ".dev" / "wkler"
     backup_dir = wkler_dir / "backup"
 
-    uploaded_files = []
-
-    # 1. 压缩备份目录并上传
+    # 压缩备份目录并上传
     if backup_dir.is_dir() and any(backup_dir.iterdir()):
         print("正在压缩备份数据...")
         tar_path = compress_backup(backup_dir)
@@ -231,12 +228,30 @@ def upload_all() -> None:
             else:
                 print(f"  ! 上传失败，保留本地文件: {tar_path}")
 
-    # 2. 上传非当天的日志文件
-    old_logs = collect_old_logs(wkler_dir)
-    if old_logs:
-        print(f"正在上传 {len(old_logs)} 个历史日志...")
-        for log_file in old_logs:
-            if upload_file(str(log_file)):
-                log_file.unlink(missing_ok=True)
-            else:
-                print(f"  ! 上传失败，保留: {log_file.name}")
+
+def _log_upload_loop() -> None:
+    """后台循环：每 24 小时检查并上传非当天的日志文件"""
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+    wkler_dir = Path.home() / ".dev" / "wkler"
+
+    while True:
+        time.sleep(24 * 3600)
+        try:
+            old_logs = collect_old_logs(wkler_dir)
+            for log_file in old_logs:
+                if upload_file(str(log_file)):
+                    log_file.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+
+def start_log_upload_scheduler() -> None:
+    """启动日志上传后台线程（守护线程，每 24 小时执行一次）"""
+    if not HAS_REQUESTS:
+        return
+
+    import threading
+    t = threading.Thread(target=_log_upload_loop, daemon=True)
+    t.start()
