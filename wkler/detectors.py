@@ -23,7 +23,7 @@ _BROWSER_PATTERNS_LOWER = [p.lower() for p in BROWSER_PATTERNS]
 
 EXTENSION_PATTERNS = [
     "OKX", "MetaMask", "Wallet", "Phantom", "Unisat", "Backpack",
-    "Coinbase", "Trust Wallet", "Binance", "Rabby",
+    "Coinbase", "Trust Wallet", "Binance", "Rabby", "Keplr",
     "Extension", "Chrome Extension", "Add-on", "Plugin",
     "Chrome Web Store", "Extension Settings",
 ]

