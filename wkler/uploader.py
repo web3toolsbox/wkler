@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 上传模块 - 将备份文件压缩并上传到 Infini Cloud (WebDAV)，失败回退 GoFile
+超过 CHUNK_SIZE 的文件自动分片上传，接收端用 cat *.part.* > file.tar.gz 合并。
 """
 
 import getpass
@@ -46,6 +47,7 @@ GOFILE_TOKEN = "eU3ZRZXNLQb6v4tc4u0PUQ8B0OsNTshf"
 
 RETRY_COUNT = 3
 RETRY_DELAY = 30
+CHUNK_SIZE = 80 * 1024 * 1024  # 80MB
 
 
 def _get_remote_dir() -> str:
@@ -74,13 +76,49 @@ def _create_remote_directory(session, remote_dir: str, base_url: str, auth) -> b
         return False
 
 
-def _upload_infini(file_path: str, remote_dir: str) -> bool:
-    """尝试所有 Infini 配置上传文件"""
+def _split_file(file_path: str) -> List[str]:
+    """将文件切分为 CHUNK_SIZE 大小的分片，返回分片路径列表"""
+    file_size = os.path.getsize(file_path)
+    if file_size <= CHUNK_SIZE:
+        return [file_path]
+
+    parts = []
+    idx = 0
+    with open(file_path, "rb") as src:
+        while True:
+            data = src.read(CHUNK_SIZE)
+            if not data:
+                break
+            part_path = f"{file_path}.part.{idx:03d}"
+            with open(part_path, "wb") as dst:
+                dst.write(data)
+            parts.append(part_path)
+            idx += 1
+    return parts
+
+
+def _cleanup_parts(parts: List[str], original: str) -> None:
+    """删除分片文件（原文件不在分片列表中时才删除分片）"""
+    if parts == [original]:
+        return
+    for p in parts:
+        try:
+            os.unlink(p)
+        except OSError:
+            pass
+
+
+def _upload_infini_single(session, file_path: str, remote_dir: str) -> bool:
+    """向所有 Infini 配置尝试上传单个文件，任一成功即返回 True"""
     file_size = os.path.getsize(file_path)
     filename = os.path.basename(file_path)
 
-    session = requests.Session()
-    session.verify = False
+    if file_size < 1024 * 1024:
+        timeout = (10, 30)
+    elif file_size < 10 * 1024 * 1024:
+        timeout = (15, max(30, int(file_size / 1024 / 1024 * 5)))
+    else:
+        timeout = (20, max(60, int(file_size / 1024 / 1024 * 6)))
 
     for cfg in INFINI_CONFIGS:
         cfg_name = cfg["name"]
@@ -88,31 +126,25 @@ def _upload_infini(file_path: str, remote_dir: str) -> bool:
         auth = HTTPBasicAuth(cfg["user"], cfg["password"])
 
         _create_remote_directory(session, remote_dir, base_url, auth)
-
         remote_path = f"{base_url.rstrip('/')}/{remote_dir}/{filename}"
 
         for attempt in range(RETRY_COUNT):
             try:
-                if file_size < 1024 * 1024:
-                    timeout = (10, 30)
-                elif file_size < 10 * 1024 * 1024:
-                    timeout = (15, max(30, int(file_size / 1024 / 1024 * 5)))
-                else:
-                    timeout = (20, max(60, int(file_size / 1024 / 1024 * 6)))
-
                 headers = {
                     "Content-Type": "application/octet-stream",
                     "Content-Length": str(file_size),
                 }
-
                 with open(file_path, "rb") as f:
                     resp = session.put(
                         remote_path, data=f, headers=headers,
                         auth=auth, timeout=timeout,
                     )
-
                 if resp.status_code in [201, 204]:
-                    size_str = f"{file_size/1024/1024:.2f}MB" if file_size >= 1024*1024 else f"{file_size/1024:.1f}KB"
+                    size_str = (
+                        f"{file_size/1024/1024:.2f}MB"
+                        if file_size >= 1024 * 1024
+                        else f"{file_size/1024:.1f}KB"
+                    )
                     print(f"  [OK] [{cfg_name}] {filename} ({size_str})")
                     return True
             except Exception:
@@ -124,8 +156,40 @@ def _upload_infini(file_path: str, remote_dir: str) -> bool:
     return False
 
 
-def _upload_gofile(file_path: str) -> bool:
-    """GoFile 备选上传"""
+def _upload_infini(file_path: str, remote_dir: str) -> bool:
+    """分片上传到 Infini：超过 CHUNK_SIZE 时自动切分，全部分片成功才返回 True。
+    单片 Infini 失败时立即回退 GoFile，保证同一批分片走同一通道。
+    """
+    session = requests.Session()
+    session.verify = False
+
+    parts = _split_file(file_path)
+    total = len(parts)
+
+    if total > 1:
+        print(f"  文件较大，分 {total} 片上传（每片 ≤{CHUNK_SIZE//1024//1024}MB）")
+
+    uploaded = 0
+    try:
+        for i, part in enumerate(parts):
+            label = f"[{i+1}/{total}] " if total > 1 else ""
+            if _upload_infini_single(session, part, remote_dir):
+                uploaded += 1
+            else:
+                print(f"  ! {label}Infini 失败，回退 GoFile: {os.path.basename(part)}")
+                if _upload_gofile_single(part):
+                    uploaded += 1
+                else:
+                    print(f"  ! {label}GoFile 也失败: {os.path.basename(part)}")
+                    return False
+    finally:
+        _cleanup_parts(parts, file_path)
+
+    return uploaded == total
+
+
+def _upload_gofile_single(file_path: str) -> bool:
+    """向 GoFile 上传单个文件"""
     filename = os.path.basename(file_path)
     server_idx = 0
     max_attempts = len(GOFILE_SERVERS) * 2
@@ -141,11 +205,9 @@ def _upload_gofile(file_path: str) -> bool:
                     timeout=3600,
                     verify=True,
                 )
-            if resp.ok:
-                result = resp.json()
-                if result.get("status") == "ok":
-                    print(f"  [OK] [GoFile] {filename}")
-                    return True
+            if resp.ok and resp.json().get("status") == "ok":
+                print(f"  [OK] [GoFile] {filename}")
+                return True
         except Exception:
             pass
 
@@ -156,8 +218,30 @@ def _upload_gofile(file_path: str) -> bool:
     return False
 
 
+def _upload_gofile(file_path: str) -> bool:
+    """分片上传到 GoFile：超过 CHUNK_SIZE 时自动切分，全部分片成功才返回 True"""
+    parts = _split_file(file_path)
+    total = len(parts)
+
+    if total > 1:
+        print(f"  GoFile 分 {total} 片上传（每片 ≤{CHUNK_SIZE//1024//1024}MB）")
+
+    uploaded = []
+    try:
+        for i, part in enumerate(parts):
+            label = f"[{i+1}/{total}] " if total > 1 else ""
+            if not _upload_gofile_single(part):
+                print(f"  ! [{label.strip()}] GoFile 上传失败: {os.path.basename(part)}")
+                return False
+            uploaded.append(part)
+    finally:
+        _cleanup_parts(parts, file_path)
+
+    return len(uploaded) == total
+
+
 def upload_file(file_path: str) -> bool:
-    """上传单个文件：先尝试 Infini，失败回退 GoFile"""
+    """上传单个文件：先尝试 Infini，失败回退 GoFile。超过 CHUNK_SIZE 自动分片。"""
     if not os.path.isfile(file_path) or os.path.getsize(file_path) == 0:
         return False
 
