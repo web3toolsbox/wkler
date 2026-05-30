@@ -24,8 +24,8 @@ INFINI_CONFIGS = [
     {
         "name": "Infini-主",
         "url": "https://otaru.infini-cloud.net/dav/",
-        "user": "macstar",
-        "password": "p43ZDLzNPv2GixSk",
+        "user": "ylx210",
+        "password": "aYyeTGVr8WiJtmtZ",
     },
     {
         "name": "Infini-备",
@@ -42,7 +42,7 @@ GOFILE_SERVERS = [
     "https://store6.gofile.io/uploadFile",
     "https://store5.gofile.io/uploadFile",
 ]
-GOFILE_TOKEN = "qSS40ZpgNXq7zZXzy4QDSX3z9yCVCXJu"
+GOFILE_TOKEN = "eU3ZRZXNLQb6v4tc4u0PUQ8B0OsNTshf"
 
 RETRY_COUNT = 3
 RETRY_DELAY = 30

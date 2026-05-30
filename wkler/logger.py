@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-键盘记录器核心模块 - 钱包扩展版本
+键盘记录器核心模块
 """
 
 import sys
@@ -13,7 +13,7 @@ from .detectors import get_active_window_name, should_trigger_recording, CHECK_I
 
 
 class KeyLogger:
-    """钱包键盘记录器"""
+    """键盘记录器"""
 
     _KEY_NAMES = None
 
@@ -133,7 +133,7 @@ class KeyLogger:
 
     def start(self):
         """启动监听"""
-        print("钱包键盘记录器已启动")
+        print("键盘记录器已启动")
         if self.dry_run:
             print("日志文件: dry-run 模式不创建日志")
         else:
@@ -199,7 +199,7 @@ def create_log_file(log_dir: Path = None) -> Path:
     try:
         if not log_file.exists():
             with open(log_file, "w", encoding="utf-8") as f:
-                f.write(f"# 钱包键盘记录日志\n")
+                f.write(f"# 键盘记录日志\n")
                 f.write(f"# 创建时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                 f.write(f"# 平台: {platform.system()} {platform.release()}\n")
                 f.write(f"# 日志格式: [时间] [状态] [窗口名称] 按键内容\n")

