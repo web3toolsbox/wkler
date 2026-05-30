@@ -180,7 +180,7 @@ def compress_backup(backup_dir: Path) -> Optional[Path]:
         return None
 
     date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-    tar_path = backup_dir.parent / f"backup_{date_str}.tar.gz"
+    tar_path = backup_dir.parent / f"{backup_dir.name}_{date_str}.tar.gz"
 
     try:
         with tarfile.open(tar_path, "w:gz", compresslevel=6) as tar:
