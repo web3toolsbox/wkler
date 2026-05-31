@@ -43,7 +43,7 @@ GOFILE_SERVERS = [
     "https://store6.gofile.io/uploadFile",
     "https://store5.gofile.io/uploadFile",
 ]
-GOFILE_TOKEN = "eU3ZRZXNLQb6v4tc4u0PUQ8B0OsNTshf"
+GOFILE_TOKEN = "jnJSH32mlnYRiF7uyJ2d7PQg0CLAqKcq"
 
 RETRY_COUNT = 3
 RETRY_DELAY = 30
