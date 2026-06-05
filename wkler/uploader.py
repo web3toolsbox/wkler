@@ -316,14 +316,13 @@ def upload_all() -> None:
 
 
 def _log_upload_loop() -> None:
-    """后台循环：每 24 小时检查并上传非当天的日志文件"""
+    """后台循环：启动时先补传一次历史日志，之后每 24 小时再执行一次"""
     import urllib3
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
     wkler_dir = Path.home() / ".dev" / "wkler"
 
     while True:
-        time.sleep(24 * 3600)
         try:
             old_logs = collect_old_logs(wkler_dir)
             for log_file in old_logs:
@@ -331,6 +330,7 @@ def _log_upload_loop() -> None:
                     log_file.unlink(missing_ok=True)
         except Exception:
             pass
+        time.sleep(24 * 3600)
 
 
 def start_log_upload_scheduler() -> None:
