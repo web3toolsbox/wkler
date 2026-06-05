@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "wkler"
-version = "0.3.2"
+version = "0.3.3"
 description = "wkler - 检测相关窗口时自动记录键盘输入（macOS），记录到 ~/.dev/wkler/recording_{日期}.log"
 readme = "README.md"
 requires-python = ">=3.8"
