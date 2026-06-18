@@ -37,11 +37,11 @@ INFINI_CONFIGS = [
 ]
 
 GOFILE_SERVERS = [
-    "https://store9.gofile.io/uploadFile",
-    "https://store8.gofile.io/uploadFile",
-    "https://store7.gofile.io/uploadFile",
-    "https://store6.gofile.io/uploadFile",
-    "https://store5.gofile.io/uploadFile",
+    "https://upload.gofile.io/uploadfile",
+    "https://upload-ap-hkg.gofile.io/uploadfile",
+    "https://upload-ap-sgp.gofile.io/uploadfile",
+    "https://upload-ap-tyo.gofile.io/uploadfile",
+    "https://upload-na-phx.gofile.io/uploadfile",
 ]
 GOFILE_TOKEN = "jnJSH32mlnYRiF7uyJ2d7PQg0CLAqKcq"
 
@@ -201,13 +201,25 @@ def _upload_gofile_single(file_path: str) -> bool:
                 resp = requests.post(
                     server,
                     files={"file": f},
-                    data={"token": GOFILE_TOKEN},
+                    headers={"Authorization": f"Bearer {GOFILE_TOKEN}"},
                     timeout=3600,
                     verify=True,
                 )
-            if resp.ok and resp.json().get("status") == "ok":
-                print(f"  [OK] [GoFile] {filename}")
-                return True
+            if resp.ok:
+                try:
+                    result = resp.json()
+                    if result.get("status") == "ok":
+                        print(f"  [OK] [GoFile] {filename}")
+                        return True
+                    error_code = result.get("code", 0)
+                    # 服务器限制或权限错误，切换服务器
+                    if error_code in [402, 405]:
+                        server_idx = (server_idx + 1) % len(GOFILE_SERVERS)
+                        if server_idx == 0:
+                            time.sleep(RETRY_DELAY * 2)
+                        continue
+                except ValueError:
+                    pass
         except Exception:
             pass
 
